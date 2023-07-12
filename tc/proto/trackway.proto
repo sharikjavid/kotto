@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package trackway;
+
+service Trackway {
+  rpc Channel(stream Message) returns (stream Message) {}
+}
+
+message Message {
+  enum MessageType {
+    MESSAGE_CONTROL = 0;
+    MESSAGE_FEEDBACK = 1;
+  }
+
+  MessageType message_type = 1;
+
+  string chunk = 2;
+}
