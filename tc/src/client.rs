@@ -8,10 +8,22 @@ use tonic::transport::Channel;
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tracing::{event, Level};
 
-use crate::proto::trackway::{trackway_client::TrackwayClient, Message};
+use serde_json::json;
+
+use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode, MessageBuilder};
+use crate::apps::Apps;
+use crate::proto::trackway::MessageType::MessageControl;
 
 #[derive(Debug)]
-pub enum ClientError {}
+pub enum ClientError {
+    Cascade(Box<dyn Error>)
+}
+
+impl From<Box<dyn Error>> for ClientError {
+    fn from(value: Box<dyn Error>) -> Self {
+        Self::Cascade(value)
+    }
+}
 
 impl Display for ClientError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -76,5 +88,25 @@ impl Session {
     pub async fn send(&self, message: Message) -> Result<(), ClientError> {
         event!(Level::DEBUG, "-> Message: {:?}", message);
         Ok(self.write.send(message).await.unwrap())
+    }
+
+    pub async fn serve(mut self) -> Result<(), ClientError> {
+        loop {
+            let msg = self.recv().await?;
+            match msg.code() {
+                MessageCode::Bye => return Ok(()),
+                MessageCode::SendApps => {
+                    let apps = Apps::default();
+                    let apps_index = apps.index().await?;
+                    for app in apps_index.cached() {
+                        MessageBuilder::from_existing(msg.clone())
+                            .data(apps.run_without_input(app).await?)
+                            .send(&self)
+                            .await?;
+                    }
+                },
+                _ => {}
+            }
+        }
     }
 }
