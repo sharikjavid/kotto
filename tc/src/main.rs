@@ -1,13 +1,13 @@
 use clap::Parser;
 use tracing_subscriber::prelude::*;
 use tracing::{event, Level};
+use crate::proto::MessageBuilder;
 
 pub mod proto;
 pub mod client;
+pub mod apps;
 
-use proto::MessageExt;
-
-/// The Trackway agent
+/// The Trackway agent.
 /// Find out more at https://trackway.ai
 #[derive(Parser, Debug)]
 struct Args {
@@ -25,17 +25,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing_log::LogTracer::init()?;
 
-    event!(Level::INFO, "Starting up");
-
     let args = Args::parse();
 
+    event!(Level::INFO, "Connecting to {}", &args.server);
     let mut client = client::Client::new(&args.server).await;
 
-    client.send(proto::trackway::Message::default().hello()).await?;
+    event!(Level::INFO, "Starting new session");
+    let mut session = client.new_session().await.unwrap();
 
-    while let Ok(Some(message)) = client.recv().await {
-        println!("message: {}", message.chunk);
-    }
+    event!(Level::INFO, "Sending `hello`");
+    session.send(MessageBuilder::hello()).await.unwrap();
+
+    let resp = session.recv().await.unwrap();
+    assert_eq!(resp.code, proto::MessageCode::Hello.to_string());
+
+    let mut resp = session.recv().await.unwrap();
+    assert_eq!(resp.code, proto::MessageCode::SendToken.to_string());
+
+    resp.data = "AAAA".to_string().into_bytes();
+    session.send(resp).await.unwrap();
+
+    let _ = session.recv().await.unwrap();
+
+    println!("Success!");
 
     Ok(())
 }
