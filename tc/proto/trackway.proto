@@ -10,6 +10,7 @@ message Message {
   enum MessageType {
     MESSAGE_CONTROL = 0;
     MESSAGE_PROMPT = 1;
+    MESSAGE_PIPE = 2;
   }
   MessageType message_type = 1;
   string code = 2;

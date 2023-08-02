@@ -2,17 +2,13 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use futures::stream::unfold;
 use futures::StreamExt;
-use tonic::{Request, Streaming};
+use tonic::Request;
 use tonic::transport::Channel;
 
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tracing::{event, Level};
 
-use serde_json::json;
-
-use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode, MessageBuilder};
-use crate::apps::Apps;
-use crate::proto::trackway::MessageType::MessageControl;
+use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode};
 
 #[derive(Debug)]
 pub enum ClientError {
@@ -26,7 +22,7 @@ impl From<Box<dyn Error>> for ClientError {
 }
 
 impl Display for ClientError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }
@@ -41,7 +37,7 @@ pub struct Client {
 
 impl Client {
     pub async fn new(addr: &str) -> Self {
-        let mut grpc = TrackwayClient::connect(addr.to_string()).await.unwrap();
+        let grpc = TrackwayClient::connect(addr.to_string()).await.unwrap();
 
         Self {
             grpc,
@@ -74,6 +70,7 @@ impl Client {
 pub struct Session {
     write: Sender<Message>,
     read: Receiver<Message>,
+
 }
 
 impl Session {
@@ -95,16 +92,6 @@ impl Session {
             let msg = self.recv().await?;
             match msg.code() {
                 MessageCode::Bye => return Ok(()),
-                MessageCode::SendApps => {
-                    let apps = Apps::default();
-                    let apps_index = apps.index().await?;
-                    for app in apps_index.cached() {
-                        MessageBuilder::from_existing(msg.clone())
-                            .data(apps.run_without_input(app).await?)
-                            .send(&self)
-                            .await?;
-                    }
-                },
                 _ => {}
             }
         }

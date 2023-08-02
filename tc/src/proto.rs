@@ -1,5 +1,6 @@
 use std::io::Cursor;
-use serde::{Serialize, Deserialize};
+
+use serde::Serialize;
 
 pub use trackway::{Message, MessageCode};
 use trackway::message::MessageType;
@@ -18,8 +19,8 @@ pub mod trackway {
     pub enum MessageCode {
         Hello,
         SendToken,
-        SendApps,
-        RunApp,
+        Call,
+        Stdout,
         Unknown,
         Bye
     }
@@ -29,8 +30,8 @@ pub mod trackway {
             let to_string = match self {
                 Self::Hello => "hello",
                 Self::SendToken => "send_token",
-                Self::SendApps => "send_apps",
-                Self::RunApp => "run_app",
+                Self::Call => "call",
+                Self::Stdout => "stdout",
                 Self::Unknown => "unknown",
                 Self::Bye => "bye"
             };
@@ -44,8 +45,8 @@ pub mod trackway {
             let res = match s {
                 "hello" => Self::Hello,
                 "send_token" => Self::SendToken,
-                "send_apps" => Self::SendApps,
-                "run_app" => Self::RunApp,
+                "call" => Self::Call,
+                "stdout" => Self::Stdout,
                 "bye" => Self::Bye,
                 _ => Self::Unknown
             };
@@ -56,6 +57,10 @@ pub mod trackway {
     impl Message {
         pub fn is_control(&self) -> bool {
             self.message_type == i32::from(message::MessageType::MessageControl)
+        }
+
+        pub fn is_pipe(&self) -> bool {
+            self.message_type == i32::from(MessageType::MessagePipe)
         }
 
         pub fn code(&self) -> MessageCode {

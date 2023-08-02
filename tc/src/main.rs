@@ -5,7 +5,7 @@ use crate::proto::MessageBuilder;
 
 pub mod proto;
 pub mod client;
-pub mod apps;
+//pub mod apps;
 
 /// The Trackway agent.
 /// Find out more at https://trackway.ai
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut resp = session.recv().await.unwrap();
     assert_eq!(resp.code, proto::MessageCode::SendToken.to_string());
 
-    resp.data = "AAAA".to_string().into_bytes();
+    resp.data = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string().into_bytes();
     session.send(resp).await.unwrap();
 
     let _ = session.recv().await.unwrap();
