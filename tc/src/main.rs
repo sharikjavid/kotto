@@ -5,7 +5,9 @@ use crate::proto::MessageBuilder;
 
 pub mod proto;
 pub mod client;
-//pub mod apps;
+pub mod runtime;
+pub mod error;
+pub mod apps;
 
 /// The Trackway agent.
 /// Find out more at https://trackway.ai
@@ -45,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     resp.data = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string().into_bytes();
     session.send(resp).await.unwrap();
 
-    let _ = session.recv().await.unwrap();
+    session.serve().await.unwrap();
 
     println!("Success!");
 

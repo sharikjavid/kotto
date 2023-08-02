@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fmt::{Display, Formatter};
 use futures::stream::unfold;
 use futures::StreamExt;
@@ -9,25 +8,7 @@ use tokio::sync::mpsc::{self, Sender, Receiver};
 use tracing::{event, Level};
 
 use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode};
-
-#[derive(Debug)]
-pub enum ClientError {
-    Cascade(Box<dyn Error>)
-}
-
-impl From<Box<dyn Error>> for ClientError {
-    fn from(value: Box<dyn Error>) -> Self {
-        Self::Cascade(value)
-    }
-}
-
-impl Display for ClientError {
-    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
-        Ok(())
-    }
-}
-
-impl Error for ClientError {}
+use crate::error::Error;
 
 #[derive(Debug)]
 pub struct Client {
@@ -44,7 +25,7 @@ impl Client {
         }
     }
 
-    pub async fn new_session(&mut self) -> Result<Session, ClientError> {
+    pub async fn new_session(&mut self) -> Result<Session, Error> {
         let (write_send, write_receive) = mpsc::channel::<Message>(256);
         let write_receiver_channel = unfold(write_receive, |mut receiver| async move {
             let next = receiver.recv().await?;
@@ -70,24 +51,24 @@ impl Client {
 pub struct Session {
     write: Sender<Message>,
     read: Receiver<Message>,
-
 }
 
 impl Session {
     #[tracing::instrument]
-    pub async fn recv(&mut self) -> Result<Message, ClientError> {
+    pub async fn recv(&mut self) -> Result<Message, Error> {
         let next = self.read.recv().await.unwrap();
         event!(Level::DEBUG, "<- Message: {:?}", next);
         Ok(next)
     }
 
     #[tracing::instrument]
-    pub async fn send(&self, message: Message) -> Result<(), ClientError> {
+    pub async fn send(&self, message: Message) -> Result<(), Error> {
         event!(Level::DEBUG, "-> Message: {:?}", message);
         Ok(self.write.send(message).await.unwrap())
     }
 
-    pub async fn serve(mut self) -> Result<(), ClientError> {
+    pub async fn serve(mut self) -> Result<(), Error> {
+        // instantiate the Deno runtime, load it up with the entrypoint
         loop {
             let msg = self.recv().await?;
             match msg.code() {

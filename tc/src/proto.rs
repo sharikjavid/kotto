@@ -4,7 +4,7 @@ use serde::Serialize;
 
 pub use trackway::{Message, MessageCode};
 use trackway::message::MessageType;
-use crate::client::{ClientError, Session};
+use crate::client::{Error, Session};
 
 pub mod trackway {
     use std::convert::Infallible;
@@ -121,7 +121,7 @@ impl MessageBuilder {
         self.message
     }
 
-    pub async fn send(self, session: &Session) -> Result<(), ClientError> {
+    pub async fn send(self, session: &Session) -> Result<(), Error> {
         session.send(self.build()).await
     }
 }

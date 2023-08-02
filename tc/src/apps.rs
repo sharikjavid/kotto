@@ -17,6 +17,7 @@ pub struct IndexEntry {
     pub name: String,
     pub version: String,
     pub source: PathBuf,
+    #[serde(default)]
     pub dependencies: Vec<String>,
 }
 
