@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use deno_core::JsRuntime;
+use deno_core::{JsRuntime, v8};
 
 use crate::error::Error;
 
@@ -27,7 +27,7 @@ pub struct AppConfig(serde_json::Value);
 
 impl AppConfig {
     pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
-        Ok(serde_json::to_vec(self)?)
+        Ok(serde_json::to_vec(&self.0)?)
     }
 }
 
@@ -167,7 +167,8 @@ impl AppsManager {
 }
 
 struct Runtime {
-    rt: JsRuntime
+    rt: JsRuntime,
+    module: v8::Global<v8::Object>
 }
 
 impl Runtime {
@@ -182,11 +183,16 @@ impl Runtime {
         let result = rt.mod_evaluate(mod_id);
         rt.run_event_loop(false).await?;
         let _ = result.await.map_err(Into::<Box<dyn StdError>>::into)?;
+        let module = rt.get_module_namespace(mod_id)?;
 
-        Ok(Self { rt })
+        Ok(Self { rt, module })
     }
 
     async fn get_config(&mut self) -> Result<AppConfig, Error> {
-        todo!()
+        let mut scope = self.rt.handle_scope();
+        let config_key = v8::String::new(&mut scope, "config").unwrap();
+        let config = self.module.open(&mut scope).get(&mut scope, config_key.into()).unwrap();
+        let as_str = v8::json::stringify(&mut scope, config).unwrap().to_rust_string_lossy(&mut scope);
+        Ok(serde_json::from_str(&as_str)?)
     }
 }
