@@ -1,4 +1,3 @@
-use std::fmt::{Display, Formatter};
 use futures::stream::unfold;
 use futures::StreamExt;
 use tonic::Request;
@@ -6,9 +5,11 @@ use tonic::transport::Channel;
 
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tracing::{event, Level};
+use crate::apps::{AppsManager, RegistryEntry};
 
-use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode};
+use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode, MessageBuilder};
 use crate::error::Error;
+use crate::proto::trackway::MessageType;
 
 #[derive(Debug)]
 pub struct Client {
@@ -67,12 +68,24 @@ impl Session {
         Ok(self.write.send(message).await.unwrap())
     }
 
-    pub async fn serve(mut self) -> Result<(), Error> {
-        // instantiate the Deno runtime, load it up with the entrypoint
+    pub async fn serve(mut self, mut manager: AppsManager) -> Result<(), Error> {
         loop {
             let msg = self.recv().await?;
             match msg.code() {
                 MessageCode::Bye => return Ok(()),
+                MessageCode::Install => {
+                    let entry: RegistryEntry = serde_json::from_slice(&msg.data)?;
+                    let config = manager.install_app(entry).await?.to_vec()?;
+                    MessageBuilder::new()
+                        .message_type(MessageType::MessagePipe)
+                        .code(MessageCode::Stdout)
+                        .data(config)
+                        .send(&self)
+                        .await?;
+                },
+                MessageCode::Uninstall => {
+                    todo!()
+                },
                 _ => {}
             }
         }

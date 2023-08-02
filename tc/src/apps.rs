@@ -1,34 +1,54 @@
-use std::error::Error;
-use std::future::Future;
+use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::collections::HashMap;
+use std::rc::Rc;
 use serde::{Serialize, Deserialize};
 
-use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, copy, empty};
-use tokio::process::Command;
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-#[derive(Serialize, Deserialize)]
+use deno_core::JsRuntime;
+
+use crate::error::Error;
+
+#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
 #[serde(transparent)]
 pub struct AppName(String);
 
+impl AppName {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Serialize, Deserialize)]
-pub struct IndexEntry {
-    pub name: String,
+#[serde(transparent)]
+pub struct AppConfig(serde_json::Value);
+
+impl AppConfig {
+    pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
+        Ok(serde_json::to_vec(self)?)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RegistryEntry {
+    pub name: AppName,
+    pub source: String,
     pub version: String,
-    pub source: PathBuf,
     #[serde(default)]
     pub dependencies: Vec<String>,
 }
 
-pub struct AppsIndex {
-    handle: File,
-    cached: Vec<IndexEntry>,
+pub struct AppsCache {
+    home: PathBuf,
+    registry: Vec<RegistryEntry>,
 }
 
-impl AppsIndex {
-    pub async fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
-        let mut f = OpenOptions::new().read(true).write(true).open(path).await?;
+impl AppsCache {
+    pub async fn load<P: AsRef<Path>>(home: P) -> Result<Self, Error> {
+        let path = home.as_ref().join("apps.toml");
+        let mut f = OpenOptions::new().read(true).open(path).await?;
 
         let mut buf = String::new();
         f.read_to_string(&mut buf).await?;
@@ -36,73 +56,137 @@ impl AppsIndex {
         let index = serde_json::from_str(&buf)?;
 
         Ok(Self {
-            handle: f,
-            cached: index,
+            home: home.as_ref().to_owned(),
+            registry: index,
         })
     }
 
-    pub async fn save(mut self) -> Result<(), Box<dyn Error>> {
-        let as_str = serde_json::to_string(&self.cached)?;
-        self.handle.write_all(as_str.as_bytes()).await?;
-        Ok(())
+    pub fn home(&self) -> &Path {
+        &self.home
     }
 
-    pub fn cached(&self) -> &[IndexEntry] {
-        self.cached.as_slice()
+    fn local_cache_path(&self, name: &AppName) -> PathBuf {
+        self.make_path(Path::new("cache").join(name.as_str()))
     }
 
-    pub fn cached_mut(&mut self) -> &mut Vec<IndexEntry> {
-        &mut self.cached
-    }
-}
-
-pub struct Apps {
-    home: PathBuf,
-}
-
-impl Default for Apps {
-    fn default() -> Self {
-        Self {
-            home: home::home_dir().expect("could not determine $HOME").join(".trackway")
-        }
-    }
-}
-
-impl Apps {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    fn make_path<P: AsRef<Path>>(&self, path: P) -> PathBuf {
+    pub fn make_path<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         self.home.join(path)
     }
 
-    pub fn index(&self) -> impl Future<Output = Result<AppsIndex, Box<dyn Error>>> {
-        AppsIndex::load(self.make_path("apps.toml"))
+    pub async fn save(&mut self) -> Result<(), Error> {
+        let as_str = serde_json::to_string(&self.registry)?;
+
+        let path = self.home.join("apps.toml");
+        let mut f = OpenOptions::new().write(true).open(path).await?;
+
+        f.write_all(as_str.as_bytes()).await?;
+
+        Ok(())
     }
 
-    pub async fn run_with_input<I: AsyncRead + Unpin>(&self, app: &IndexEntry, mut input: I) -> Result<Vec<u8>, Box<dyn Error>> {
-        let mut cmd = Command::new("/opt/homebrew/bin/deno");
+    pub async fn get_source(&self, name: &AppName) -> Result<Option<PathBuf>, Error> {
+        let app = if let Some(app) = self.get_entry(name) { app } else { return Ok(None) };
+        let cached_path = self.local_cache_path(&app.name);
 
-        cmd
-            .arg("run")
-            .arg(self.make_path("std").to_str().unwrap())
-            .arg(self.make_path("cached").join(&app.name).to_str().unwrap())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped());
+        // lookup if already exists, at the right version, otherwise download here TODO
 
-        let mut proc = cmd.spawn()?;
-
-        let mut stdin = proc.stdin.take().unwrap();
-        copy(&mut input, &mut stdin).await?;
-        drop(stdin);
-
-        let proc_output = proc.wait_with_output().await?;
-
-        Ok(proc_output.stdout)
+        Ok(Some(cached_path))
     }
 
-    pub async fn run_without_input(&self, app: &IndexEntry) -> Result<Vec<u8>, Box<dyn Error>> {
-        self.run_with_input(app, empty()).await
+    pub fn get_entry(&self, name: &AppName) -> Option<RegistryEntry> {
+        self.registry.iter().find(|e| &e.name == name).map(|e| e.clone())
+    }
+
+    pub async fn insert(&mut self, entry: RegistryEntry) -> Option<RegistryEntry> {
+        let output = match self.registry.iter_mut().find(|e| {
+            e.name == entry.name
+        }) {
+            Some(existing) => {
+                let output = existing.clone();
+                *existing = entry;
+                Some(output)
+            }
+            None => {
+                self.registry.push(entry);
+                None
+            }
+        };
+        self.save().await.unwrap();
+        output
+    }
+
+    pub async fn remove(&mut self, name: &AppName) -> Option<RegistryEntry> {
+        let (idx, entry) = self.registry.iter().enumerate().find(|(_, e)| &e.name == name)?;
+        let output = entry.clone();
+        self.registry.remove(idx);
+        self.save().await.unwrap();
+        Some(output)
+    }
+}
+
+pub struct AppsManager {
+    cache: AppsCache,
+    apps: HashMap<AppName, Runtime>
+}
+
+impl AppsManager {
+    pub async fn new() -> Result<Self, Error> {
+        let home = home::home_dir().expect("could not determine $HOME").join(".trackway");
+        let cache = AppsCache::load(home).await?;
+
+        let mut apps = HashMap::new();
+        for entry in &cache.registry {
+            let module_path = cache.get_source(&entry.name).await?.unwrap();
+            apps.insert(entry.name.clone(), Runtime::new(&module_path).await?);
+        }
+
+        Ok(Self {
+            cache,
+            apps
+        })
+    }
+
+    pub async fn install_app(&mut self, entry: RegistryEntry) -> Result<AppConfig, Error> {
+        let name = entry.name.clone();
+        self.cache.insert(entry).await;
+
+        // SAFETY: Never `Ok(None)` because of `.insert` above
+        let module_path = self.cache.get_source(&name).await?.unwrap();
+
+        let runtime = self.apps.entry(name).or_insert(Runtime::new(&module_path).await?);
+        let config = runtime.get_config().await?;
+
+        Ok(config)
+    }
+
+    pub async fn uninstall_app(&mut self, name: &AppName) -> Result<(), Error> {
+        self.cache.remove(name).await;
+        self.apps.remove(name);
+        Ok(())
+    }
+}
+
+struct Runtime {
+    rt: JsRuntime
+}
+
+impl Runtime {
+    async fn new(module_path: &Path) -> Result<Self, Error> {
+        let main_module = deno_core::resolve_path(module_path.display().to_string().as_str(), Path::new("/"))?;
+        let mut rt = JsRuntime::new(deno_core::RuntimeOptions {
+            module_loader: Some(Rc::new(deno_core::FsModuleLoader)),
+            ..Default::default()
+        });
+
+        let mod_id = rt.load_main_module(&main_module, None).await?;
+        let result = rt.mod_evaluate(mod_id);
+        rt.run_event_loop(false).await?;
+        let _ = result.await.map_err(Into::<Box<dyn StdError>>::into)?;
+
+        Ok(Self { rt })
+    }
+
+    async fn get_config(&mut self) -> Result<AppConfig, Error> {
+        todo!()
     }
 }

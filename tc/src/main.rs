@@ -1,11 +1,11 @@
 use clap::Parser;
 use tracing_subscriber::prelude::*;
 use tracing::{event, Level};
+use crate::apps::AppsManager;
 use crate::proto::MessageBuilder;
 
 pub mod proto;
 pub mod client;
-pub mod runtime;
 pub mod error;
 pub mod apps;
 
@@ -47,7 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     resp.data = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string().into_bytes();
     session.send(resp).await.unwrap();
 
-    session.serve().await.unwrap();
+    let manager = AppsManager::new().await?;
+    session.serve(manager).await.unwrap();
 
     println!("Success!");
 

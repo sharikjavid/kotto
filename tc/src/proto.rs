@@ -4,7 +4,9 @@ use serde::Serialize;
 
 pub use trackway::{Message, MessageCode};
 use trackway::message::MessageType;
-use crate::client::{Error, Session};
+
+use crate::error::Error;
+use crate::client::Session;
 
 pub mod trackway {
     use std::convert::Infallible;
@@ -19,6 +21,8 @@ pub mod trackway {
     pub enum MessageCode {
         Hello,
         SendToken,
+        Install,
+        Uninstall,
         Call,
         Stdout,
         Unknown,
@@ -31,6 +35,8 @@ pub mod trackway {
                 Self::Hello => "hello",
                 Self::SendToken => "send_token",
                 Self::Call => "call",
+                Self::Install => "install",
+                Self::Uninstall => "uninstall",
                 Self::Stdout => "stdout",
                 Self::Unknown => "unknown",
                 Self::Bye => "bye"
@@ -46,6 +52,8 @@ pub mod trackway {
                 "hello" => Self::Hello,
                 "send_token" => Self::SendToken,
                 "call" => Self::Call,
+                "install" => Self::Install,
+                "uninstall" => Self::Uninstall,
                 "stdout" => Self::Stdout,
                 "bye" => Self::Bye,
                 _ => Self::Unknown
@@ -86,6 +94,10 @@ impl Default for MessageBuilder {
 }
 
 impl MessageBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn from_existing(message: Message) -> Self {
         Self {
             message
