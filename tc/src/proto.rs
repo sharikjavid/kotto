@@ -135,8 +135,8 @@ impl MessageBuilder {
         self
     }
 
-    pub fn data(mut self, data: Vec<u8>) -> Self {
-        self.message.data = data;
+    pub fn data<D: AsRef<[u8]>>(mut self, data: D) -> Self {
+        self.message.data = data.as_ref().to_vec();
         self
     }
 

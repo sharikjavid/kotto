@@ -27,7 +27,7 @@ impl<T> ToMessageData for T
 
 #[derive(Debug)]
 pub struct Client {
-    grpc: TrackwayClient<Channel>,
+    grpc: TrackwayClient<Channel>
 }
 
 impl Client {
@@ -81,16 +81,38 @@ impl Session {
     }
 
     #[tracing::instrument]
-    pub async fn recv(&mut self) -> Result<Message, Error> {
+    pub(crate) async fn recv(&mut self) -> Result<Message, Error> {
         let next = self.read.recv().await.unwrap();
         event!(Level::DEBUG, "<- Message: {:?}", next);
         Ok(next)
     }
 
     #[tracing::instrument]
-    pub async fn send(&self, message: Message) -> Result<(), Error> {
+    pub(crate) async fn send(&self, message: Message) -> Result<(), Error> {
         event!(Level::DEBUG, "-> Message: {:?}", message);
         Ok(self.write.send(message).await.unwrap())
+    }
+
+    #[tracing::instrument]
+    pub async fn do_handshake(&mut self, token: &str) -> Result<(), Error> {
+        self.send(MessageBuilder::hello()).await?;
+
+        let resp = self.recv().await?;
+        assert_eq!(resp.code, MessageCode::Hello.to_string());
+
+        let resp = self.recv().await?;
+        assert_eq!(resp.code, MessageCode::SendToken.to_string());
+
+        MessageBuilder::new()
+            .code(MessageCode::Ok)
+            .data(token)
+            .send(self)
+            .await?;
+
+        let resp = self.recv().await?;
+        assert_eq!(resp.code, MessageCode::Ok.to_string());
+
+        Ok(())
     }
 
     #[tracing::instrument(skip(manager))]
