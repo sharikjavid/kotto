@@ -8,6 +8,9 @@ pub mod proto;
 pub mod client;
 pub mod error;
 pub mod apps;
+pub mod repl;
+
+pub(crate) mod ts_module_loader;
 
 /// The Trackway agent.
 /// Find out more at https://trackway.ai
@@ -15,6 +18,9 @@ pub mod apps;
 struct Args {
     /// Address of the server
     server: String,
+    /// Agent token
+    #[arg(long, env = "AGENT_TOKEN")]
+    token: String
 }
 
 #[tokio::main]
@@ -44,11 +50,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut resp = session.recv().await.unwrap();
     assert_eq!(resp.code, proto::MessageCode::SendToken.to_string());
 
-    resp.data = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string().into_bytes();
+    resp.data = args.token.into_bytes();
     session.send(resp).await.unwrap();
 
+    let repl = repl::Repl::from_session(&session);
     let manager = AppsManager::new().await?;
-    session.serve(manager).await.unwrap();
+    tokio::select!(
+        _ = session.serve(manager) => {},
+        _ = repl.run() => {}
+    );
 
     println!("Success!");
 

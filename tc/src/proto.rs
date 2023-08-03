@@ -16,6 +16,7 @@ pub mod trackway {
     tonic::include_proto!("trackway");
 
     pub use message::MessageType;
+    use crate::proto::trackway::MessageType::{MessageControl, MessagePipe, MessagePrompt};
 
     #[derive(Debug, Eq, PartialEq)]
     pub enum MessageCode {
@@ -24,7 +25,9 @@ pub mod trackway {
         Install,
         Uninstall,
         Call,
-        Stdout,
+        Ok,
+        Err,
+        Ready,
         Unknown,
         Bye
     }
@@ -37,7 +40,9 @@ pub mod trackway {
                 Self::Call => "call",
                 Self::Install => "install",
                 Self::Uninstall => "uninstall",
-                Self::Stdout => "stdout",
+                Self::Ok => "ok",
+                Self::Err => "err",
+                Self::Ready => "ready",
                 Self::Unknown => "unknown",
                 Self::Bye => "bye"
             };
@@ -47,14 +52,16 @@ pub mod trackway {
 
     impl FromStr for MessageCode {
         type Err = Infallible;
-        fn from_str(s: &str) -> Result<Self, Self::Err> {
+        fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
             let res = match s {
                 "hello" => Self::Hello,
                 "send_token" => Self::SendToken,
                 "call" => Self::Call,
                 "install" => Self::Install,
                 "uninstall" => Self::Uninstall,
-                "stdout" => Self::Stdout,
+                "ok" => Self::Ok,
+                "err" => Self::Err,
+                "ready" => Self::Ready,
                 "bye" => Self::Bye,
                 _ => Self::Unknown
             };
@@ -64,11 +71,15 @@ pub mod trackway {
 
     impl Message {
         pub fn is_control(&self) -> bool {
-            self.message_type == i32::from(message::MessageType::MessageControl)
+            self.message_type == i32::from(MessageControl)
         }
 
         pub fn is_pipe(&self) -> bool {
-            self.message_type == i32::from(MessageType::MessagePipe)
+            self.message_type == i32::from(MessagePipe)
+        }
+
+        pub fn is_prompt(&self) -> bool {
+            self.message_type == i32::from(MessagePrompt)
         }
 
         pub fn code(&self) -> MessageCode {

@@ -28,7 +28,10 @@ impl_cascading_errors!(
     serde_json::Error,
     deno_core::anyhow::Error,
     deno_core::ModuleResolutionError,
-
+    serde_v8::Error,
+    toml::de::Error,
+    toml::ser::Error,
+    tokio::task::JoinError
 );
 
 impl Display for Error {

@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use deno_core::{JsRuntime, v8};
+use deno_core::{JsRuntime, serde_v8, v8};
 
 use crate::error::Error;
 
@@ -22,13 +22,16 @@ impl AppName {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AppConfig(serde_json::Value);
+pub struct AppConfig {
+    name: String,
+    description: String,
+    commands: HashMap<String, CommandConfig>
+}
 
-impl AppConfig {
-    pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
-        Ok(serde_json::to_vec(&self.0)?)
-    }
+#[derive(Serialize, Deserialize)]
+pub struct CommandConfig {
+    run: String,
+    description: String
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -36,8 +39,15 @@ pub struct RegistryEntry {
     pub name: AppName,
     pub source: String,
     pub version: String,
+    //#[serde(default)]
+    //pub dependencies: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Registry {
+    version: u32,
     #[serde(default)]
-    pub dependencies: Vec<String>,
+    app: Vec<RegistryEntry>
 }
 
 pub struct AppsCache {
@@ -53,11 +63,11 @@ impl AppsCache {
         let mut buf = String::new();
         f.read_to_string(&mut buf).await?;
 
-        let index = serde_json::from_str(&buf)?;
+        let index: Registry = toml::from_str(&buf)?;
 
         Ok(Self {
             home: home.as_ref().to_owned(),
-            registry: index,
+            registry: index.app,
         })
     }
 
@@ -66,7 +76,7 @@ impl AppsCache {
     }
 
     fn local_cache_path(&self, name: &AppName) -> PathBuf {
-        self.make_path(Path::new("cache").join(name.as_str()))
+        self.make_path(Path::new("cache").join(name.as_str()).join("mod.ts"))
     }
 
     pub fn make_path<P: AsRef<Path>>(&self, path: P) -> PathBuf {
@@ -74,7 +84,10 @@ impl AppsCache {
     }
 
     pub async fn save(&mut self) -> Result<(), Error> {
-        let as_str = serde_json::to_string(&self.registry)?;
+        let as_str = toml::to_string(&Registry {
+            version: 1,
+            app: self.registry.clone()
+        })?;
 
         let path = self.home.join("apps.toml");
         let mut f = OpenOptions::new().write(true).open(path).await?;
@@ -164,6 +177,10 @@ impl AppsManager {
         self.apps.remove(name);
         Ok(())
     }
+
+    pub async fn call(&mut self, name: &AppName, command: &str) -> Option<Result<CommandOutput, Error>> {
+        Some(self.apps.get_mut(name)?.call(command).await)
+    }
 }
 
 struct Runtime {
@@ -175,7 +192,7 @@ impl Runtime {
     async fn new(module_path: &Path) -> Result<Self, Error> {
         let main_module = deno_core::resolve_path(module_path.display().to_string().as_str(), Path::new("/"))?;
         let mut rt = JsRuntime::new(deno_core::RuntimeOptions {
-            module_loader: Some(Rc::new(deno_core::FsModuleLoader)),
+            module_loader: Some(Rc::new(crate::ts_module_loader::TsModuleLoader)),
             ..Default::default()
         });
 
@@ -191,8 +208,34 @@ impl Runtime {
     async fn get_config(&mut self) -> Result<AppConfig, Error> {
         let mut scope = self.rt.handle_scope();
         let config_key = v8::String::new(&mut scope, "config").unwrap();
+
+        // TODO handle error
         let config = self.module.open(&mut scope).get(&mut scope, config_key.into()).unwrap();
-        let as_str = v8::json::stringify(&mut scope, config).unwrap().to_rust_string_lossy(&mut scope);
-        Ok(serde_json::from_str(&as_str)?)
+
+        Ok(serde_v8::from_v8(&mut scope, config)?)
+    }
+
+    async fn call(&mut self, command: &str) -> Result<CommandOutput, Error> {
+        let mut scope = self.rt.handle_scope();
+        let command_key = v8::String::new(&mut scope, command).unwrap();
+
+        let command = self.module.open(&mut scope).get(&mut scope, command_key.into()).unwrap();
+        let function: v8::Local<v8::Function> = command.try_into().unwrap();
+        let mod_local = v8::Local::new(&mut scope, &self.module);
+        let result = function.call(&mut scope, mod_local.into(), &[]).unwrap();
+
+        Ok(serde_v8::from_v8(&mut scope, result)?)
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct RunCommand {
+    pub app: AppName,
+    pub command: String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CommandOutput {
+    pub output: String
+}
+
