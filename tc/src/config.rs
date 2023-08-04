@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tracing::{event, Level};
 
 use crate::error::Error;
 
@@ -21,13 +22,16 @@ impl Config {
 
         let parent = path.parent().unwrap();
         if ! parent.exists() {
+            event!(Level::INFO, "config dir {} does not exist, creating", parent.display());
             fs::create_dir_all(parent).await?;
         }
 
-        let mut f = fs::OpenOptions::new().read(true).create(true).open(path).await?;
+        event!(Level::INFO, "using config {}", path.display());
+        let mut f = fs::OpenOptions::new().read(true).write(true).create(true).open(path).await?;
 
         let mut buf = String::new();
         f.read_to_string(&mut buf).await?;
+
         Ok(toml::from_str(&buf)?)
     }
 

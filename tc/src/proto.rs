@@ -22,12 +22,12 @@ pub mod trackway {
     pub enum MessageCode {
         Hello,
         SendToken,
-        Install,
-        Uninstall,
+        SendExports,
+        Exports,
+        Ready,
         Call,
         Ok,
         Err,
-        Ready,
         Unknown,
         Bye
     }
@@ -37,12 +37,12 @@ pub mod trackway {
             let to_string = match self {
                 Self::Hello => "hello",
                 Self::SendToken => "send_token",
+                Self::SendExports => "send_exports",
+                Self::Exports => "exports",
+                Self::Ready => "ready",
                 Self::Call => "call",
-                Self::Install => "install",
-                Self::Uninstall => "uninstall",
                 Self::Ok => "ok",
                 Self::Err => "err",
-                Self::Ready => "ready",
                 Self::Unknown => "unknown",
                 Self::Bye => "bye"
             };
@@ -56,12 +56,12 @@ pub mod trackway {
             let res = match s {
                 "hello" => Self::Hello,
                 "send_token" => Self::SendToken,
+                "send_exports" => Self::SendExports,
+                "exports" => Self::Exports,
+                "ready" => Self::Ready,
                 "call" => Self::Call,
-                "install" => Self::Install,
-                "uninstall" => Self::Uninstall,
                 "ok" => Self::Ok,
                 "err" => Self::Err,
-                "ready" => Self::Ready,
                 "bye" => Self::Bye,
                 _ => Self::Unknown
             };
@@ -89,6 +89,19 @@ pub mod trackway {
         pub fn is_bye(&self) -> bool {
             self.is_control() && self.code() == MessageCode::Bye
         }
+    }
+}
+
+pub trait ToMessageData {
+    fn to_data(&self) -> Result<Vec<u8>, Error>;
+}
+
+impl<T> ToMessageData for T
+    where
+        T: serde::Serialize
+{
+    fn to_data(&self) -> Result<Vec<u8>, Error> {
+        Ok(serde_json::to_vec(self)?)
     }
 }
 

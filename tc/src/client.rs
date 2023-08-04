@@ -1,28 +1,49 @@
 use futures::stream::unfold;
 use futures::StreamExt;
+use serde::{Deserialize, Serialize};
 use tonic::Request;
 use tonic::transport::Channel;
 
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tokio::sync::broadcast;
 use tracing::{event, Level};
-use crate::apps::{AppsManager, RegistryEntry, RunCommand};
+use crate::runtime::{ModuleConfig, RunCommandOptions, Runtime};
+
+use std::collections::HashMap;
 
 use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode, MessageBuilder};
 use crate::error::Error;
 use crate::proto::trackway::MessageType;
 
-pub trait ToMessageData {
-    fn to_data(&self) -> Result<Vec<u8>, Error>;
+#[derive(Serialize, Deserialize)]
+pub struct ExportModule {
+    name: String,
+    attributes: HashMap<String, ExportAttribute>
 }
 
-impl<T> ToMessageData for T
-    where
-        T: serde::Serialize
-{
-    fn to_data(&self) -> Result<Vec<u8>, Error> {
-        Ok(serde_json::to_vec(self)?)
+impl ExportModule {
+    pub fn from_module_config(config: &ModuleConfig) -> Self {
+        Self {
+            name: config.name.to_string(),
+            attributes: config
+                .commands
+                .iter()
+                .map(|(command_name, command_config)| {
+                    (
+                        command_name.clone(),
+                        ExportAttribute {
+                            description: command_config.description.clone()
+                        }
+                    )
+                })
+                .collect()
+        }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ExportAttribute {
+    description: String
 }
 
 #[derive(Debug)]
@@ -59,7 +80,8 @@ impl Client {
         Ok(Session {
             write: write_send,
             read: read_receive,
-            subscribers
+            subscribers,
+            terminate: false
         })
     }
 }
@@ -68,7 +90,8 @@ impl Client {
 pub struct Session {
     write: Sender<Message>,
     read: Receiver<Message>,
-    subscribers: broadcast::Sender<Message>
+    subscribers: broadcast::Sender<Message>,
+    terminate: bool
 }
 
 impl Session {
@@ -105,7 +128,7 @@ impl Session {
 
         MessageBuilder::new()
             .code(MessageCode::Ok)
-            .data(token)
+            .data(token.as_bytes())
             .send(self)
             .await?;
 
@@ -115,33 +138,35 @@ impl Session {
         Ok(())
     }
 
-    #[tracing::instrument(skip(manager))]
-    pub async fn handle_control(&mut self, manager: &mut AppsManager, code: MessageCode, data: &[u8]) -> Result<(), Error> {
+    #[tracing::instrument(skip(rt))]
+    pub async fn handle_control(&mut self, rt: &mut Runtime, code: MessageCode, data: &[u8]) -> Result<(), Error> {
         match code {
-            MessageCode::Bye => return Ok(()),
-            MessageCode::Ready => {
-                event!(Level::INFO, "Ready")
+            MessageCode::Bye => {
+                self.terminate = true;
             },
-            MessageCode::Install => {
-                let entry: RegistryEntry = serde_json::from_slice(data)?;
-                let config = manager.install_app(entry).await?.to_data()?;
+            MessageCode::Ready => {
+                MessageBuilder::new()
+                    .message_type(MessageType::MessagePrompt)
+                    .data(&rt.get_config()?.task)
+                    .send(&self)
+                    .await?;
+            }
+            MessageCode::SendExports => {
+                let exports = ExportModule::from_module_config(&rt.get_config()?);
                 MessageBuilder::new()
                     .message_type(MessageType::MessageControl)
-                    .code(MessageCode::Ok)
-                    .data(config)
+                    .code(MessageCode::Exports)
+                    .data(&serde_json::to_vec(&exports)?)
                     .send(&self)
                     .await?;
             },
-            MessageCode::Uninstall => {
-                todo!()
-            },
             MessageCode::Call => {
-                let run: RunCommand = serde_json::from_slice(data)?;
-                let res = manager.call(&run.app, &run.command).await.unwrap()?;
+                let run: RunCommandOptions = serde_json::from_slice(data)?;
+                let output = rt.call(run).await?;
                 MessageBuilder::new()
                     .message_type(MessageType::MessagePipe)
                     .code(MessageCode::Unknown)
-                    .data(res.to_data()?)
+                    .data(&serde_json::to_vec(&output)?)
                     .send(&self)
                     .await?;
             },
@@ -150,14 +175,14 @@ impl Session {
         Ok(())
     }
 
-    pub async fn serve(mut self, mut manager: AppsManager) -> Result<(), Error> {
-        loop {
+    pub async fn serve(mut self, mut rt: Runtime) -> Result<(), Error> {
+        while !self.terminate {
             let msg = self.recv().await?;
 
             self.subscribers.send(msg.clone()).unwrap();
 
             let res = match msg {
-                msg if msg.is_control() => self.handle_control(&mut manager, msg.code(), &msg.data).await,
+                msg if msg.is_control() => self.handle_control(&mut rt, msg.code(), &msg.data).await,
                 _ => {
                     Ok(())
                 }
@@ -168,5 +193,7 @@ impl Session {
                 // TODO emit an error message if required
             }
         }
+
+        Ok(())
     }
 }
