@@ -1,6 +1,7 @@
 use std::io::{self, Cursor, Write, BufRead};
 use std::convert::identity;
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 use deno_ast::swc::common::{source_map::Pos, Span};
 
 use colored::*;
@@ -79,14 +80,14 @@ impl<W> CompileMessageEmitter<W>
 }
 
 pub trait Emitter {
-    fn emit<D: Display>(&mut self, span: &Span, level: Level, msg: D);
+    fn emit(&mut self, span: &Span, level: Level, msg: &str);
 }
 
 impl<W> Emitter for CompileMessageEmitter<W>
     where
         W: Write
 {
-    fn emit<D: Display>(&mut self, span: &Span, level: Level, msg: D) {
+    fn emit(&mut self, span: &Span, level: Level, msg: &str) {
         let _ = self.write(span, level, msg);
     }
 }

@@ -22,9 +22,7 @@ pub mod trackway {
     pub enum MessageCode {
         Hello,
         SendToken,
-        SendExports,
-        Exports,
-        Ready,
+        Task,
         Call,
         Ok,
         Err,
@@ -37,9 +35,7 @@ pub mod trackway {
             let to_string = match self {
                 Self::Hello => "hello",
                 Self::SendToken => "send_token",
-                Self::SendExports => "send_exports",
-                Self::Exports => "exports",
-                Self::Ready => "ready",
+                Self::Task => "task",
                 Self::Call => "call",
                 Self::Ok => "ok",
                 Self::Err => "err",
@@ -56,9 +52,7 @@ pub mod trackway {
             let res = match s {
                 "hello" => Self::Hello,
                 "send_token" => Self::SendToken,
-                "send_exports" => Self::SendExports,
-                "exports" => Self::Exports,
-                "ready" => Self::Ready,
+                "task" => Self::Task,
                 "call" => Self::Call,
                 "ok" => Self::Ok,
                 "err" => Self::Err,

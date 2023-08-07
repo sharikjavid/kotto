@@ -4,6 +4,8 @@ use std::process::exit;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::prelude::*;
 use tracing::{event, Level};
+use crate::client::Client;
+use crate::runtime::Runtime;
 
 pub mod proto;
 pub mod client;
@@ -28,40 +30,24 @@ impl Cli {
         }
     }
 
-    pub async fn run_script<P: AsRef<Path>>(script: P) -> Result<(), error::Error> {
+    pub async fn run_script<P: AsRef<Path>>(script_path: P) -> Result<(), error::Error> {
         let cfg = config::Config::load().await?;
 
+        let token = cfg.token.as_ref().expect("you must run `login` first");
         let server_url = "http://localhost:8000";
 
-        event!(Level::INFO, "Connecting to {}", server_url);
-        let mut client = client::Client::new(server_url).await;
+        event!(Level::INFO, "connecting to {server_url}");
+        let client = Client::new(server_url, token).await;
 
-        event!(Level::INFO, "Starting new session");
-        let mut session = client.new_session().await.unwrap();
+        let mut runtime = Runtime::new_with_client(client);
+        let module_specifier = deno_core::resolve_path(
+            script_path.as_ref().to_str().unwrap(),
+            &std::env::current_dir().unwrap()
+        )?;
 
-        event!(Level::INFO, "Starting handshake");
-        session.do_handshake(cfg.token.as_ref().expect("you must run `login` first")).await?;
+        let module_id = runtime.load_main_module(&module_specifier).await?;
 
-        let task = tokio::spawn({
-            let mut subscriber = session.subscribe();
-            async move {
-                loop {
-                    let msg = subscriber.recv().await.unwrap();
-                    if msg.is_prompt() { return msg; }
-                }
-            }
-        });
-
-        let rt = runtime::Runtime::new(script.as_ref()).await?;
-
-        tokio::select!(
-            _ = session.serve(rt) => {
-                event!(Level::WARN, "Session terminated early");
-            },
-            msg = task => {
-                println!("{}", String::from_utf8(msg.unwrap().data).unwrap());
-            }
-        );
+        runtime.evaluate_module(module_id).await?;
 
         Ok(())
     }
