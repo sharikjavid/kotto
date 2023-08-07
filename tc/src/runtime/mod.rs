@@ -8,6 +8,8 @@ use serde::{Serialize, Deserialize};
 use deno_core::{JsRuntime, ModuleId, serde_v8, v8};
 
 mod ts_module_loader;
+mod compile;
+mod emit;
 
 use crate::error::Error;
 
