@@ -16,12 +16,12 @@ use crate::error::Error;
 use crate::proto::trackway::MessageType;
 
 #[derive(Serialize, Deserialize)]
-pub struct ExportModule {
+pub struct ExportTask {
     name: String,
     attributes: HashMap<String, ExportAttribute>
 }
 
-impl ExportModule {
+impl ExportTask {
     pub fn from_module_config(config: &ModuleConfig) -> Self {
         Self {
             name: config.name.to_string(),
@@ -152,7 +152,7 @@ impl Session {
                     .await?;
             }
             MessageCode::SendExports => {
-                let exports = ExportModule::from_module_config(&rt.get_config()?);
+                let exports = ExportTask::from_module_config(&rt.get_config()?);
                 MessageBuilder::new()
                     .message_type(MessageType::MessageControl)
                     .code(MessageCode::Exports)
