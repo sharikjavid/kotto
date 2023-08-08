@@ -2,10 +2,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::stderr;
 use std::rc::Rc;
+use std::sync::Arc;
 use deno_ast::{MediaType, ParseParams, SourceTextInfo};
 use deno_ast::swc::visit::{VisitMut, Visit};
 use deno_ast::swc::ast::{CallExpr, ClassDecl, Ident, Param, Str, TsTypeAliasDecl, TsTypeRef, Lit, Decorator, Class, ClassMethod, Module, Id};
+use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap};
 use deno_core::{ModuleCode, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, futures::FutureExt, Resource};
+use tonic::codegen::Body;
 use tracing::event;
 use crate::error::Error;
 use crate::runtime::emit::CompileMessageEmitter;
@@ -208,35 +211,47 @@ impl TaskMethod {
     }
 }
 
-pub struct SimpleModuleLoader {
-    task_map: Rc<TaskMapResource>
+pub struct Compiler {
+    task_map: Rc<TaskMapResource>,
+    source_map: Arc<SourceMap>,
+    swc_compiler: swc::Compiler
 }
 
 pub struct RawModuleSource {
     module_specifier: ModuleSpecifier,
     media_type: MediaType,
-    source_text: String,
+    source_file: Arc<SourceFile>,
 }
 
-impl SimpleModuleLoader {
-    pub fn new(task_map: Rc<TaskMapResource>) -> Self {
-        Self { task_map }
+impl Compiler {
+    pub fn into_module_loader(self) -> PassthruModuleLoader {
+        PassthruModuleLoader(Rc::new(self))
     }
 
-    pub async fn fetch_source(module_specifier: &ModuleSpecifier) -> Result<RawModuleSource, Error> {
-        let (media_type, source_text) = if module_specifier.scheme() == "file" {
+    pub fn new() -> Self {
+        let source_map = Arc::new(SourceMap::new(FilePathMapping::empty()));
+        Self {
+            task_map: todo!(),
+            swc_compiler: swc::Compiler::new(source_map.clone()),
+            source_map
+        }
+    }
+
+    #[tracing::instrument]
+    pub fn fetch_source(&self, module_specifier: ModuleSpecifier) -> Result<RawModuleSource, Error> {
+        let (media_type, source_file) = if module_specifier.scheme() == "file" {
             let path = module_specifier.to_file_path().unwrap();
             let media_type = MediaType::from_path(&path);
-            let source_text = tokio::fs::read_to_string(&path).await?;
-            (media_type, source_text)
+            let source_file = self.source_map.load_file(&path).unwrap();
+            (media_type, source_file)
         } else {
-            todo!("module scheme unsupported: ${module_specifier:?}")
+            todo!("imports other than local files are not supported yet: ${module_specifier:?}")
         };
 
         Ok(RawModuleSource {
-            module_specifier: module_specifier.clone(),
+            module_specifier,
             media_type,
-            source_text,
+            source_file
         })
     }
 
@@ -261,19 +276,20 @@ impl SimpleModuleLoader {
         }
     }
 
+    #[tracing::instrument]
     pub fn load_module(
-        task_map: Rc<TaskMapResource>,
+        &self,
         RawModuleSource {
             module_specifier,
             media_type,
-            mut source_text,
-    }: RawModuleSource) -> Result<ModuleSource, Error> {
+            source_file
+        }: RawModuleSource) -> Result<ModuleSource, Error> {
         let module_type = Self::module_type_from_media_type(&media_type);
 
         if Self::should_process_from_media_type(&media_type) {
             let parsed = deno_ast::parse_module_with_post_process(ParseParams {
                 specifier: module_specifier.to_string(),
-                text_info: SourceTextInfo::from_string(source_text.clone()),
+                text_info: SourceTextInfo::new(source_file.src.into()),
                 media_type,
                 capture_tokens: false,
                 scope_analysis: true,
@@ -293,7 +309,7 @@ impl SimpleModuleLoader {
                 ).run(&mut module);
 
                 // TODO(brokad): this is unhygienic
-                task_map.0.borrow_mut().0.extend(visited_tasks.0.into_iter());
+                self.task_map.0.borrow_mut().0.extend(visited_tasks.0.into_iter());
 
                 module
             }).unwrap();
@@ -307,9 +323,16 @@ impl SimpleModuleLoader {
             &module_specifier,
         ))
     }
+
+    pub async fn load_module_impl(self: Rc<Self>, module_specifier: ModuleSpecifier) -> Result<ModuleSource, Error> {
+        let source = self.fetch_source(module_specifier).await?;
+        self.load_module(source).await
+    }
 }
 
-impl ModuleLoader for SimpleModuleLoader {
+pub struct PassthruModuleLoader(pub Rc<Compiler>);
+
+impl ModuleLoader for PassthruModuleLoader {
     fn resolve(
         &self,
         specifier: &str,
@@ -326,12 +349,6 @@ impl ModuleLoader for SimpleModuleLoader {
         _is_dyn_import: bool,
     ) -> std::pin::Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
-        let task_map = self.task_map.clone();
-        async move {
-            event!(tracing::Level::INFO, "loading module {module_specifier}");
-            let raw_source = Self::fetch_source(&module_specifier).await.unwrap();
-            let module_source = Self::load_module(task_map, raw_source).unwrap();
-            Ok(module_source)
-        }.boxed_local()
+        self.0.clone().load_module_impl(module_specifier).boxed_local()
     }
 }

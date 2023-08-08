@@ -1,16 +1,19 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::error::Error as StdError;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::Arc;
 use deno_ast::ModuleSpecifier;
 use serde::{Serialize, Deserialize};
 
-use deno_core::{op, Op, JsRuntime, ModuleId, ResourceId, OpState, AsyncRefCell, Resource, AsyncMutFuture, AsyncRefFuture, RcRef, Extension};
+use deno_core::{op, v8, Op, JsRuntime, ModuleId, ResourceId, OpState, AsyncRefCell, Resource, AsyncMutFuture, AsyncRefFuture, RcRef, Extension};
 use deno_core::error::AnyError;
+use deno_core::v8::HandleScope;
 use futures::{SinkExt, TryFutureExt};
+use swc::TransformOutput;
 use crate::client::{Client, Session};
 
 mod compile;
@@ -20,40 +23,29 @@ use emit::Emitter;
 use crate::error::Error;
 use crate::proto::{MessageBuilder, MessageCode};
 use crate::proto::trackway::MessageType;
-use crate::runtime::compile::TaskMapResource;
+use crate::runtime::compile::{Compiler, TaskMapResource};
 
 const CLIENT_RID: ResourceId = 0;
 const TASK_MAP_RID: ResourceId = 1;
 
-#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
-#[serde(transparent)]
-pub struct AppName(String);
-
-impl Deref for AppName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+#[derive(Serialize)]
+pub struct NewInstanceMessage {
+    task_name: String,
+    task_description: String,
+    task_context: Arc<TransformOutput>,
+    instance_id: ResourceId
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct ModuleConfig {
-    pub name: AppName,
-    pub description: String,
-    pub methods: HashMap<String, MethodConfig>
+#[derive(Deserialize)]
+pub struct EvaluateScriptMessage {
+    instance_id: ResourceId,
+    source_code: String
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct MethodConfig {
-    pub description: String
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PollInstanceOp {
-    method_name: String,
-    args: Vec<serde_json::Value>,
-    done: bool
+#[derive(Serialize)]
+pub struct JsonValueMessage {
+    instance_id: ResourceId,
+    value: serde_json::Value
 }
 
 pub struct RuntimeOptions {
@@ -69,16 +61,16 @@ pub struct Runtime {
 impl Runtime {
     #[tracing::instrument(skip(client))]
     pub fn new_with_client(client: Client) -> Self {
-        let task_map_resource = Rc::new(TaskMapResource::new());
+        let compiler = Compiler::new();
 
         let rt = JsRuntime::new(deno_core::RuntimeOptions {
-            module_loader: Some(Rc::new(compile::SimpleModuleLoader::new(task_map_resource.clone()))),
+            module_loader: Some(Rc::new(compiler.into_module_loader())),
             extensions: vec![
                 Extension {
                     ops: Cow::from(vec![
                         task_register_instance::DECL,
                         task_poll_instance::DECL,
-                        task_send_output::DECL,
+                        task_run_with_side_effects::DECL,
                         task_cancel_instance::DECL
                     ]),
                     op_state_fn: Some(Box::new(|op_state| {
@@ -125,70 +117,89 @@ impl ClientResource {
 impl Resource for ClientResource {}
 
 impl ClientResource {
-    pub fn borrow_client_mut(self: Rc<Self>) -> AsyncMutFuture<Client> {
+    pub fn borrow_mut(self: Rc<Self>) -> AsyncMutFuture<Client> {
         RcRef::map(self, |this| &this.inner).borrow_mut()
     }
 }
 
-pub struct Instance {
-    session: AsyncRefCell<Session>
+pub type SlotId = ResourceId;
+
+pub enum Slot {
+    Source(String),
+    Ok(serde_json::Value)
 }
 
-impl Resource for Instance {}
+pub struct Instance {
+    session: Session,
+    slots: HashMap<SlotId, Slot>,
+    next_slot: SlotId
+}
 
 impl Instance {
-    pub fn borrow_session_mut(self: Rc<Self>) -> AsyncMutFuture<Session> {
-        RcRef::map(self, |this| &this.session).borrow_mut()
+    pub fn into_resource(self) -> InstanceResource {
+        InstanceResource(RefCell::new(self))
     }
 
-    pub fn borrow_session(self: Rc<Self>) -> AsyncRefFuture<Session> {
-        RcRef::map(self, |this| &this.session).borrow()
+    pub fn from_session(session: Session) -> Self {
+        Self {
+            session,
+            slots: HashMap::new(),
+            next_slot: 0
+        }
     }
 
-    pub async fn poll(self: Rc<Self>) -> Result<PollInstanceOp, Error> {
-        let message = self.borrow_session_mut().await.recv().await?;
-        // TODO(brokad): make sure we only receive the right messages here (control, call types)
-        Ok(serde_json::from_slice(&message.data)?)
+    // TODO(brokad): make sure we only receive the right kind of messages here (control, call types)
+    pub async fn poll(&mut self, slot_id: Option<SlotId>) -> Result<SlotId, Error> {
+        if let Some(slot_id) = slot_id {
+            match self.slots.remove(&slot_id) {
+                Some(Slot::Ok(value)) => MessageBuilder::new()
+                    .message_type(MessageType::MessagePipe)
+                    .code(MessageCode::Ok)
+                    .data(serde_json::to_vec(&value).unwrap())
+                    .send(&self.session)
+                    .await?,
+                _ => {}
+            };
+        }
+        let message = self.session.recv().await?;
+        let EvaluateScriptMessage { source_code, .. } = serde_json::from_slice(&message.data)?;
+
+        let slot_id = self.next_slot;
+        self.slots.insert(slot_id, Slot::Source(source_code));
+        self.next_slot += 1;
+
+        Ok(slot_id)
     }
 
-    pub async fn send(self: Rc<Self>, output: &serde_json::Value) -> Result<(), Error> {
-        let session = self.borrow_session().await;
-        MessageBuilder::new()
-            .message_type(MessageType::MessagePipe)
-            .code(MessageCode::Unknown)
-            .data(serde_json::to_vec(output)?)
-            .send(&session)
-            .await
-    }
-
-    pub fn from_op_state(state: Rc<RefCell<OpState>>, instance_id: ResourceId) -> Result<Rc<Self>, Error> {
-        let instance = state.borrow_mut().resource_table.get::<Self>(instance_id).unwrap();
-        Ok(instance)
-    }
-
-    #[tracing::instrument(skip(state))]
-    pub async fn add_new(state: Rc<RefCell<OpState>>, task_id: String) -> Result<ResourceId, Error> {
-        let (task_map, op_client) = {
-            let resource_table = &mut state.borrow_mut().resource_table;
-            (
-                resource_table.get::<TaskMapResource>(TASK_MAP_RID).unwrap(),
-                resource_table.get::<ClientResource>(CLIENT_RID).unwrap()
-            )
+    pub fn run<'s>(&mut self, scope: &mut HandleScope<'s>, slot_id: SlotId) -> Result<(), Error> {
+        let slot = match self.slots.remove(&slot_id).unwrap() {
+            Slot::Source(source_code) => {
+                let source_value = v8::String::new(scope, &source_code).unwrap();
+                let script = v8::Script::compile(scope, source_value, None).unwrap();
+                let result_value = script.run(scope).unwrap();
+                let as_json: serde_json::Value = serde_v8::from_v8(scope, result_value).unwrap();
+                Slot::Ok(as_json)
+            },
+            otherwise => otherwise
         };
 
-        let task = task_map.get_task(&task_id).unwrap();
+        self.slots.insert(slot_id, slot).unwrap();
 
-        let mut session = op_client.borrow_client_mut().await.new_session().await?;
+        Ok(())
+    }
+}
 
-        session.do_handshake().await?;
+pub struct InstanceResource(RefCell<Instance>);
 
-        // TODO(brokad): send task
-        //
+impl Resource for InstanceResource {}
 
-        let instance = Self {
-            session: AsyncRefCell::new(session)
-        };
-        Ok(state.borrow_mut().resource_table.add(instance))
+impl InstanceResource {
+    pub fn from_op_state(state: Rc<RefCell<OpState>>, instance_id: ResourceId) -> Rc<Self> {
+        state.borrow_mut().resource_table.get::<Self>(instance_id).unwrap()
+    }
+
+    pub fn borrow_mut(&self) -> RefMut<'_, Instance> {
+        self.0.borrow_mut()
     }
 }
 
@@ -198,36 +209,51 @@ async fn task_register_instance(
     state: Rc<RefCell<OpState>>,
     task_id: String
 ) -> ResourceId {
-    Instance::add_new(state, task_id)
-        .await
-        .unwrap()
+    let (task_map, op_client) = {
+        let resource_table = &mut state.borrow_mut().resource_table;
+        (
+            resource_table.get::<TaskMapResource>(TASK_MAP_RID).unwrap(),
+            resource_table.get::<ClientResource>(CLIENT_RID).unwrap()
+        )
+    };
+
+    let mut session = op_client.borrow_mut().await.new_session().await?;
+
+    session.do_handshake().await?;
+
+    let instance = Instance::from_session(session);
+
+    state.borrow_mut().resource_table.add(instance.into_resource())
 }
 
 #[op]
 #[tracing::instrument(skip(state))]
 async fn task_poll_instance(
     state: Rc<RefCell<OpState>>,
-    instance_id: ResourceId
-) -> Result<PollInstanceOp, AnyError> {
-    Instance::from_op_state(state, instance_id)
-        .unwrap()
-        .poll()
+    instance_id: ResourceId,
+    slot_id: Option<ResourceId>
+) -> Result<ResourceId, AnyError> {
+    InstanceResource::from_op_state(state, instance_id)
+        .borrow_mut()
+        .poll(slot_id)
         .await
         .map_err(|_| todo!())
 }
 
 #[op]
 #[tracing::instrument(skip(state))]
-async fn task_send_output(
+fn task_run_with_side_effects<'s>(
+    scope: &mut HandleScope<'s>,
     state: Rc<RefCell<OpState>>,
     instance_id: ResourceId,
-    output: serde_json::Value
+    slot_id: Option<ResourceId>,
 ) -> Result<(), AnyError> {
-    Instance::from_op_state(state, instance_id)
-        .unwrap()
-        .send(&output)
-        .await
-        .map_err(|_| todo!())
+    if let Some(slot_id) = slot_id {
+        InstanceResource::from_op_state(state, instance_id)
+            .borrow_mut()
+            .run(scope, slot_id)?;
+    }
+    Ok(())
 }
 
 #[op]

@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use futures::stream::unfold;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -8,44 +7,9 @@ use tonic::transport::Channel;
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tokio::sync::broadcast;
 use tracing::{event, Level};
-use crate::runtime::{ModuleConfig, Runtime};
-
-use std::collections::HashMap;
-use deno_core::Resource;
 
 use crate::proto::{trackway::trackway_client::TrackwayClient, Message, MessageCode, MessageBuilder};
 use crate::error::Error;
-
-#[derive(Serialize, Deserialize)]
-pub struct ExportTask {
-    name: String,
-    attributes: HashMap<String, ExportAttribute>
-}
-
-impl ExportTask {
-    pub fn from_module_config(config: &ModuleConfig) -> Self {
-        Self {
-            name: config.name.to_string(),
-            attributes: config
-                .methods
-                .iter()
-                .map(|(command_name, command_config)| {
-                    (
-                        command_name.clone(),
-                        ExportAttribute {
-                            description: command_config.description.clone()
-                        }
-                    )
-                })
-                .collect()
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct ExportAttribute {
-    description: String
-}
 
 #[derive(Debug)]
 pub struct Client {
@@ -139,7 +103,6 @@ impl Session {
 
         let resp = self.recv().await?;
         assert_eq!(resp.code, MessageCode::Ok.to_string());
-
 
         Ok(())
     }
