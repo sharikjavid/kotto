@@ -2,12 +2,13 @@ use std::cell::{RefCell, RefMut};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::rc::Rc;
-use std::sync::Arc;
 use deno_ast::{MediaType, ParseParams, SourceTextInfo};
 use deno_ast::swc::visit::{VisitMut, Visit};
-use deno_ast::swc::ast::{CallExpr, ClassDecl, Ident, Param, Str, TsTypeAliasDecl, TsTypeRef, Lit, Decorator, Class, ClassMethod, Module, Id, TsTypeAnn, Pat, BindingIdent, TsType};
+use deno_ast::swc::ast::{self, CallExpr, ClassDecl, Ident, Str, TsTypeAliasDecl, Lit, Decorator, Class, ClassMethod, Module, Id, TsTypeAnn, Pat, TsType};
 use deno_ast::swc::codegen::{Node, self};
-use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap};
+use deno_ast::swc::codegen::text_writer::WriteJs;
+use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap, Span};
+use deno_ast::swc::visit;
 use deno_core::{ModuleCode, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, futures::FutureExt, Resource};
 use deno_core::error::AnyError;
 use tonic::codegen::Body;
@@ -28,6 +29,19 @@ impl Default for TypeAliasMap {
 }
 
 impl TypeAliasMap {
+    pub(crate) fn ts_type_to_id(ty: &TsType) -> Option<Id> {
+        match ty {
+            TsType::TsTypeRef(ast::TsTypeRef { type_name, .. }) => {
+                let ident = match type_name {
+                    ast::TsEntityName::TsQualifiedName(qual) => &qual.right,
+                    ast::TsEntityName::Ident(ident) => ident
+                };
+                Some(ident.to_id())
+            }
+            _ => None
+        }
+    }
+
     pub fn get_decl(&self, id: &Id) -> Option<&TsTypeAliasDecl> {
         self.0.get(id)
     }
@@ -53,6 +67,17 @@ impl<'m> TypeAliasVisitor<'m> {
 impl<'m> Visit for TypeAliasVisitor<'m> {
     fn visit_ts_type_alias_decl(&mut self, n: &TsTypeAliasDecl) {
         self.0.insert_decl(n.id.to_id(), n.clone());
+    }
+}
+
+struct TsTypeClosureVisitor<'m>(&'m mut Vec<Id>);
+
+impl<'m> Visit for TsTypeClosureVisitor<'m> {
+    fn visit_ts_type(&mut self, ts_type: &TsType) {
+        if let Some(id) = TypeAliasMap::ts_type_to_id(ts_type) {
+            self.0.push(id);
+        }
+        visit::visit_ts_type(self, ts_type)
     }
 }
 
@@ -88,13 +113,13 @@ impl MatchCallStrLit {
 pub struct Task {
     name: Ident,
     description: Str,
-    output: TsTypeRef,
+    output: TsType,
     methods: HashMap<Ident, TaskMethod>,
 }
 
 impl Task {
-    fn get_type_param_as_ts_type_ref(n: &Class) -> Option<TsTypeRef> {
-        n.super_type_params.as_ref()?.params.get(0)?.as_ts_type_ref().cloned()
+    fn get_type_param_as_ts_type(n: &Class) -> Option<TsType> {
+        n.super_type_params.as_ref()?.params.get(0).cloned().map(|t| *t)
     }
 
     fn match_class_decl(n: &ClassDecl) -> Option<Self> {
@@ -102,7 +127,7 @@ impl Task {
 
         let name = n.ident.clone();
 
-        let output = Self::get_type_param_as_ts_type_ref(&n.class)
+        let output = Self::get_type_param_as_ts_type(&n.class)
             .expect("`@task` decorated classes must extend `Task<O>`");
 
         let methods = n.class.body.iter().filter_map(|member| member.as_method())
@@ -183,33 +208,40 @@ impl<'m> Visit for TaskVisitor<'m> {
 
 #[derive(Debug, Clone)]
 pub struct TaskMethod {
-    params: Vec<TsTypeRef>,
-    return_type: Option<TsTypeRef>,
+    params: Vec<TsType>,
+    return_type: Option<TsType>,
     hint: Str,
 }
 
 impl TaskMethod {
+    pub fn type_ann_from_pat(pat: &Pat) -> Option<&TsType> {
+        match pat {
+            Pat::Ident(ast::BindingIdent { type_ann, .. }) |
+            Pat::Object(ast::ObjectPat { type_ann, .. }) |
+            Pat::Array(ast::ArrayPat { type_ann, .. }) |
+            Pat::Assign(ast::AssignPat { type_ann, .. }) |
+            Pat::Rest(ast::RestPat { type_ann, .. }) => {
+                type_ann.as_ref().map(|d| d.type_ann.as_ref())
+            }
+            _ => None
+        }
+    }
+
+    #[tracing::instrument]
     pub fn from_method(n: &ClassMethod) -> Option<Self> {
         let hint = MatchCallStrLit::new("hint").first_match_decorator(&n.function.decorators)?;
 
         let params = n.function.params.iter().map(|param| {
-            match &param.pat {
-                Pat::Ident(
-                    BindingIdent {
-                        type_ann: Some(type_ann),
-                        ..
-                    }) => {
-                    match type_ann.type_ann.as_ref() {
-                        TsType::TsTypeRef(type_ref) => type_ref.clone(),
-                        _ => todo!("unsupported")
-                    }
-                },
-                _ => todo!("unsupported function parameters: try simplifying the method's signature")
+            if let Some(type_ann) = Self::type_ann_from_pat(&param.pat) {
+                type_ann.clone()
+            }
+            else {
+                todo!("unsupported function parameters: try simplifying the method's signature")
             }
         }).collect();
 
         let return_type = n.function.return_type.as_ref()
-            .and_then(|t| t.type_ann.as_ts_type_ref())
+            .map(|t| t.type_ann.as_ref())
             .cloned();
 
         Some(Self {
@@ -263,6 +295,7 @@ impl Compiler {
         }
     }
 
+    // TODO(brokad): Very hacky
     pub fn print_task_context<W: Write>(&self, task_name: &str, mut writer: W) -> Result<(), Error> {
         let task = self.task_map.get(&task_name).unwrap();
 
@@ -276,29 +309,82 @@ impl Compiler {
             wr: codegen::text_writer::JsWriter::new(source_map.clone(), "\n", writer, None)
         };
 
-        let mut type_closure = HashSet::new();
+        let mut to_visit = Vec::new();
 
-        let output_type_ref = task.output.type_name.clone().ident().unwrap().to_id();
-        type_closure.insert(output_type_ref);
+        to_visit.push(task.output.clone());
 
         for task_method in task.methods.values() {
-            let output_type_ref = task_method.return_type.as_ref().unwrap().type_name.clone().ident().unwrap().to_id();
-            type_closure.insert(output_type_ref);
+            if let Some(return_type) = task_method.return_type.as_ref() {
+                to_visit.push(return_type.clone());
+            }
 
             for param in &task_method.params {
-                let param_type_ref = param.type_name.clone().ident().unwrap().to_id();
-                type_closure.insert(param_type_ref);
+                to_visit.push(param.clone());
+            }
+        }
+
+        let mut type_closure = HashSet::new();
+        while let Some(next) = to_visit.pop() {
+            let mut refs = Vec::new();
+            TsTypeClosureVisitor(&mut refs)
+                .visit_ts_type(&next);
+            for type_ref in refs {
+                if !type_closure.contains(&type_ref) {
+                    if let Some(TsTypeAliasDecl { type_ann, .. }) = type_map.get_decl(&type_ref) {
+                        to_visit.push(type_ann.as_ref().clone());
+                    }
+                    type_closure.insert(type_ref);
+                }
             }
         }
 
         for type_ref in type_closure {
             if let Some(type_decl) = type_map.get_decl(&type_ref) {
                 type_decl.emit_with(&mut emitter).unwrap();
+                emitter.wr.write_line().unwrap();
             }
         }
 
-        for task_method in task.methods.values() {
-            todo!();
+        for (task_ident, task_method) in task.methods.iter() {
+            emitter.wr.write_line().unwrap();
+            emitter.wr.write_str(&format!("\n// hint: {}", task_method.hint.value)).unwrap();
+            emitter.wr.write_line().unwrap();
+            let param_ident = Ident::new("_".into(), Span::default());
+            let return_type = task_method.return_type.as_ref().map(|rt| {
+                Box::new(ast::TsTypeAnn {
+                    span: Span::default(),
+                    type_ann: Box::new(rt.clone())
+                })
+            });
+            let params: Vec<_> = task_method.params.iter().map(|param_type| {
+                let binding = ast::BindingIdent {
+                    id: param_ident.clone(),
+                    type_ann: Some(Box::new(ast::TsTypeAnn {
+                        span: Span::default(),
+                        type_ann: Box::new(param_type.clone())
+                    }))
+                };
+                ast::Param {
+                    span: Span::default(),
+                    decorators: Vec::new(),
+                    pat: binding.into()
+                }
+            }).collect();
+            let function = ast::FnDecl {
+                ident: task_ident.clone(),
+                declare: false,
+                function: Box::new(ast::Function {
+                    params,
+                    decorators: Vec::new(),
+                    span: Span::default(),
+                    body: None,
+                    is_generator: false,
+                    is_async: false,
+                    type_params: None,
+                    return_type
+                })
+            };
+            function.emit_with(&mut emitter);
         }
 
         Ok(())

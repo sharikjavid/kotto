@@ -34,19 +34,14 @@ pub struct NewInstanceMessage {
 }
 
 #[derive(Deserialize)]
-pub struct EvaluateScriptMessage {
-    source_code: String
+pub struct EvaluateMessage {
+    method_name: String,
+    method_params: Vec<serde_json::Value>
 }
 
 #[derive(Serialize)]
 pub struct JsonValueMessage {
     json_value: serde_json::Value
-}
-
-pub struct RuntimeOptions {
-    client: Client,
-    source: PathBuf,
-    emitter: Box<dyn Emitter>
 }
 
 pub struct Runtime {
@@ -121,7 +116,10 @@ impl ClientResource {
 pub type SlotId = ResourceId;
 
 pub enum Slot {
-    Source(String),
+    Source {
+        method_name: String,
+        method_params: Vec<serde_json::Value>
+    },
     Ok(serde_json::Value)
 }
 
@@ -165,29 +163,35 @@ impl Instance {
             return Ok(None);
         }
 
-        let EvaluateScriptMessage { source_code, .. } = serde_json::from_slice(&message.data)?;
+        let EvaluateMessage { method_name, method_params } = serde_json::from_slice(&message.data)?;
 
         let slot_id = self.next_slot;
-        self.slots.insert(slot_id, Slot::Source(source_code));
+        self.slots.insert(slot_id, Slot::Source { method_name, method_params });
         self.next_slot += 1;
 
         Ok(Some(slot_id))
     }
 
-    pub fn run<'s>(&mut self, scope: &mut v8::HandleScope<'s>, slot_id: SlotId) -> Result<(), Error> {
+    pub fn run<'s>(
+        &mut self,
+        scope: &mut v8::HandleScope<'s>,
+        this: v8::Local<'s, v8::Value>,
+        slot_id: SlotId
+    ) -> Result<(), Error> {
         let slot = match self.slots.remove(&slot_id).unwrap() {
-            Slot::Source(source_code) => {
-                // TODO(brokad): Run this in isolate
-                let source_value = v8::String::new(scope, &source_code).unwrap();
-                let script = v8::Script::compile(scope, source_value, None).unwrap();
-                let result_value = script.run(scope).unwrap();
+            Slot::Source { method_name, method_params } => {
+                // TODO(brokad): log this action to stderr
+                let key = v8::String::new(scope, &method_name).unwrap();
+                let method: v8::Local<'_, v8::Function> = this.to_object(scope).unwrap().get(scope, key.into()).unwrap().try_into().unwrap();
+                let params = method_params.into_iter().map(|json_param| serde_v8::to_v8(scope, json_param)).collect::<Result<Vec<_>, _>>().unwrap();
+                let result_value = method.call(scope, this, params.as_slice()).unwrap();
                 let as_json: serde_json::Value = serde_v8::from_v8(scope, result_value).unwrap();
                 Slot::Ok(as_json)
             },
             otherwise => otherwise
         };
 
-        self.slots.insert(slot_id, slot).unwrap();
+        self.slots.insert(slot_id, slot);
 
         Ok(())
     }
@@ -267,17 +271,18 @@ async fn task_poll_instance(
 }
 
 #[op(v8)]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(state, this))]
 fn task_run_with_side_effects<'s>(
     scope: &mut v8::HandleScope<'s>,
     state: Rc<RefCell<OpState>>,
+    this: serde_v8::Value<'s>,
     instance_id: ResourceId,
     slot_id: Option<ResourceId>,
 ) -> Result<(), AnyError> {
     if let Some(slot_id) = slot_id {
         InstanceResource::from_op_state(state, instance_id)
             .borrow_mut()
-            .run(scope, slot_id)
+            .run(scope, this.v8_value, slot_id)
             .unwrap();
     }
     Ok(())
