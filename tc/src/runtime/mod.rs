@@ -23,29 +23,26 @@ use emit::Emitter;
 use crate::error::Error;
 use crate::proto::{MessageBuilder, MessageCode};
 use crate::proto::trackway::MessageType;
-use crate::runtime::compile::{Compiler, TaskMapResource};
+use crate::runtime::compile::{Compiler, PassthruModuleLoader, TaskMapResource};
 
 const CLIENT_RID: ResourceId = 0;
-const TASK_MAP_RID: ResourceId = 1;
+const COMPILER_RID: ResourceId = 1;
 
 #[derive(Serialize)]
 pub struct NewInstanceMessage {
     task_name: String,
     task_description: String,
-    task_context: Arc<TransformOutput>,
-    instance_id: ResourceId
+    task_context: Arc<TransformOutput>
 }
 
 #[derive(Deserialize)]
 pub struct EvaluateScriptMessage {
-    instance_id: ResourceId,
     source_code: String
 }
 
 #[derive(Serialize)]
 pub struct JsonValueMessage {
-    instance_id: ResourceId,
-    value: serde_json::Value
+    json_value: serde_json::Value
 }
 
 pub struct RuntimeOptions {
@@ -61,10 +58,11 @@ pub struct Runtime {
 impl Runtime {
     #[tracing::instrument(skip(client))]
     pub fn new_with_client(client: Client) -> Self {
-        let compiler = Compiler::new();
+        let compiler_resource = Rc::new(Compiler::new().into_resource());
+        let module_loader = PassthruModuleLoader::from_compiler_resource(compiler_resource.clone());
 
         let rt = JsRuntime::new(deno_core::RuntimeOptions {
-            module_loader: Some(Rc::new(compiler.into_module_loader())),
+            module_loader: Some(Rc::new(module_loader)),
             extensions: vec![
                 Extension {
                     ops: Cow::from(vec![
@@ -76,7 +74,7 @@ impl Runtime {
                     op_state_fn: Some(Box::new(|op_state| {
                         let client_resource = ClientResource::from_client(client);
                         assert_eq!(op_state.resource_table.add(client_resource), CLIENT_RID);
-                        assert_eq!(op_state.resource_table.add_rc(task_map_resource), TASK_MAP_RID);
+                        assert_eq!(op_state.resource_table.add_rc(compiler_resource), COMPILER_RID);
                     })),
                     ..Default::default()
                 }
@@ -149,31 +147,39 @@ impl Instance {
     }
 
     // TODO(brokad): make sure we only receive the right kind of messages here (control, call types)
-    pub async fn poll(&mut self, slot_id: Option<SlotId>) -> Result<SlotId, Error> {
+    pub async fn poll(&mut self, slot_id: Option<SlotId>) -> Result<Option<SlotId>, Error> {
         if let Some(slot_id) = slot_id {
             match self.slots.remove(&slot_id) {
                 Some(Slot::Ok(value)) => MessageBuilder::new()
                     .message_type(MessageType::MessagePipe)
                     .code(MessageCode::Ok)
-                    .data(serde_json::to_vec(&value).unwrap())
+                    .data(serde_json::to_vec(&JsonValueMessage {
+                        json_value: value
+                    }).unwrap())
                     .send(&self.session)
                     .await?,
                 _ => {}
             };
         }
         let message = self.session.recv().await?;
+
+        if message.is_bye() {
+            return Ok(None);
+        }
+
         let EvaluateScriptMessage { source_code, .. } = serde_json::from_slice(&message.data)?;
 
         let slot_id = self.next_slot;
         self.slots.insert(slot_id, Slot::Source(source_code));
         self.next_slot += 1;
 
-        Ok(slot_id)
+        Ok(Some(slot_id))
     }
 
     pub fn run<'s>(&mut self, scope: &mut HandleScope<'s>, slot_id: SlotId) -> Result<(), Error> {
         let slot = match self.slots.remove(&slot_id).unwrap() {
             Slot::Source(source_code) => {
+                // TODO(brokad): Run this in isolate
                 let source_value = v8::String::new(scope, &source_code).unwrap();
                 let script = v8::Script::compile(scope, source_value, None).unwrap();
                 let result_value = script.run(scope).unwrap();
@@ -212,7 +218,7 @@ async fn task_register_instance(
     let (task_map, op_client) = {
         let resource_table = &mut state.borrow_mut().resource_table;
         (
-            resource_table.get::<TaskMapResource>(TASK_MAP_RID).unwrap(),
+            resource_table.get::<TaskMapResource>(COMPILER_RID).unwrap(),
             resource_table.get::<ClientResource>(CLIENT_RID).unwrap()
         )
     };
@@ -220,6 +226,8 @@ async fn task_register_instance(
     let mut session = op_client.borrow_mut().await.new_session().await?;
 
     session.do_handshake().await?;
+
+    // TODO(brokad): Send NewTaskMessage; probably put `Compiler` in `resource_table`
 
     let instance = Instance::from_session(session);
 
@@ -231,8 +239,8 @@ async fn task_register_instance(
 async fn task_poll_instance(
     state: Rc<RefCell<OpState>>,
     instance_id: ResourceId,
-    slot_id: Option<ResourceId>
-) -> Result<ResourceId, AnyError> {
+    slot_id: Option<SlotId>
+) -> Result<Option<SlotId>, AnyError> {
     InstanceResource::from_op_state(state, instance_id)
         .borrow_mut()
         .poll(slot_id)

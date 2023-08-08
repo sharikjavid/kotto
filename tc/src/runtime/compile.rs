@@ -1,17 +1,14 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
-use std::io::stderr;
 use std::rc::Rc;
 use std::sync::Arc;
 use deno_ast::{MediaType, ParseParams, SourceTextInfo};
 use deno_ast::swc::visit::{VisitMut, Visit};
-use deno_ast::swc::ast::{CallExpr, ClassDecl, Ident, Param, Str, TsTypeAliasDecl, TsTypeRef, Lit, Decorator, Class, ClassMethod, Module, Id};
+use deno_ast::swc::ast::{CallExpr, ClassDecl, Ident, Param, Str, TsTypeAliasDecl, TsTypeRef, Lit, Decorator, Class, ClassMethod, Module, Id, TsTypeAnn, Pat, BindingIdent, TsType};
 use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap};
 use deno_core::{ModuleCode, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, futures::FutureExt, Resource};
 use tonic::codegen::Body;
-use tracing::event;
 use crate::error::Error;
-use crate::runtime::emit::CompileMessageEmitter;
 
 use super::emit::{Emitter, Level};
 
@@ -21,29 +18,38 @@ const HINT_WARN_MIN_SIZE: usize = 12;
 #[derive(Debug)]
 pub struct TypeAliasMap(HashMap<Id, TsTypeAliasDecl>);
 
+impl Default for TypeAliasMap {
+    fn default() -> Self {
+        Self(HashMap::default())
+    }
+}
+
 impl TypeAliasMap {
     pub fn get_decl(&self, id: &Id) -> Option<&TsTypeAliasDecl> {
         self.0.get(id)
     }
+
+    pub fn insert_decl(&mut self, id: Id, decl: TsTypeAliasDecl) -> Option<TsTypeAliasDecl> {
+        self.0.insert(id, decl)
+    }
 }
 
 #[derive(Debug)]
-pub struct TypeAliasVisitor(HashMap<Id, TsTypeAliasDecl>);
+pub struct TypeAliasVisitor<'m>(&'m mut TypeAliasMap);
 
-impl TypeAliasVisitor {
-    pub fn new() -> Self {
-        Self(HashMap::new())
+impl<'m> TypeAliasVisitor<'m> {
+    pub fn new(map: &'m mut TypeAliasMap) -> Self {
+        Self(map)
     }
 
-    pub fn run(mut self, module: &Module) -> TypeAliasMap {
+    pub fn run(mut self, module: &Module) {
         self.visit_module(module);
-        TypeAliasMap(self.0)
     }
 }
 
 impl Visit for TypeAliasVisitor {
     fn visit_ts_type_alias_decl(&mut self, n: &TsTypeAliasDecl) {
-        self.0.insert(n.id.to_id(), n.clone());
+        self.0.insert_decl(n.id.to_id(), n.clone());
     }
 }
 
@@ -116,56 +122,42 @@ pub struct TaskMap(HashMap<String, Task>);
 
 impl Default for TaskMap {
     fn default() -> Self {
-        Self(HashMap::new())
+        Self(HashMap::default())
     }
 }
 
-pub struct TaskMapResource(RefCell<TaskMap>);
-
-impl TaskMapResource {
-    pub fn new() -> Self {
-        Self(RefCell::new(TaskMap::default()))
+impl TaskMap {
+    pub fn get(&self, task_name: &str) -> Option<&Task> {
+        self.0.get(task_name)
     }
 
-    pub fn get_task(&self, task_id: &String) -> Option<Task> {
-        self.0.borrow().0.get(task_id).cloned()
+    pub fn insert(&mut self, task_name: String, task: Task) -> Option<Task> {
+        self.0.insert(task_name, task)
     }
 }
 
-impl Resource for TaskMapResource {}
-
-pub struct TaskVisitor<'s, E> {
-    type_alias: &'s TypeAliasMap,
-    visited_tasks: HashMap<String, Task>,
-    emitter: E,
+pub struct TaskVisitor<'m> {
+    task_map: &'m mut TaskMap
 }
 
-impl<'s, E> TaskVisitor<'s, E> {
-    pub fn new(type_alias: &'s TypeAliasMap, emitter: E) -> Self {
+impl<'m> TaskVisitor<'m> {
+    pub fn new(task_map: &'m mut TaskMap) -> Self {
         Self {
-            type_alias,
-            visited_tasks: HashMap::new(),
-            emitter,
+            task_map
         }
     }
 }
 
-impl<'s, E> TaskVisitor<'s, E>
-    where
-        E: Emitter
-{
-    pub fn run(mut self, n: &mut Module) -> TaskMap {
-        self.visit_mut_module(n);
-        TaskMap(self.visited_tasks)
+impl<'m> TaskVisitor<'m> {
+    pub fn run(mut self, n: &Module) {
+        self.visit_module(n);
     }
 }
 
-impl<'s, E> VisitMut for TaskVisitor<'s, E>
-    where
-        E: Emitter
-{
-    fn visit_mut_class_decl(&mut self, n: &mut ClassDecl) {
+impl<'m> Visit for TaskVisitor<'m> {
+    fn visit_class_decl(&mut self, n: &ClassDecl) {
         if let Some(task) = Task::match_class_decl(n) {
+            /*
             // short description for @task
             if task.description.value.split(" ").count() < TASK_WARN_MIN_SIZE {
                 self.emitter.emit(&task.description.span, Level::WARN, "the `@task` description is short: try expanding on what the task does");
@@ -177,20 +169,17 @@ impl<'s, E> VisitMut for TaskVisitor<'s, E>
                     self.emitter.emit(&hint.span, Level::WARN, "the `@hint` description is short: try expanding on how the method is used");
                 }
             }
-
-            if task.output.type_name.as_ident().map(Ident::to_id).and_then(|id| self.type_alias.get_decl(&id)).is_none() {
-                self.emitter.emit(&task.output.span, Level::WARN, "unable to resolve the output type of this task: try simplifying the type hints");
-            }
+             */
 
             // TODO(brokad): this is unhygienic
-            self.visited_tasks.insert(n.ident.to_id().0.to_string(), task);
+            self.task_map.insert(n.ident.to_id().0.to_string(), task);
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TaskMethod {
-    params: Vec<Param>,
+    params: Vec<TsTypeRef>,
     return_type: Option<TsTypeRef>,
     hint: Str,
 }
@@ -199,23 +188,56 @@ impl TaskMethod {
     pub fn from_method(n: &ClassMethod) -> Option<Self> {
         let hint = MatchCallStrLit::new("hint").first_match_decorator(&n.function.decorators)?;
 
+        let params = n.function.params.iter().map(|param| {
+            match &param.pat {
+                Pat::Ident(
+                    BindingIdent {
+                        type_ann: Some(TsTypeAnn {
+                            type_ann: TsType::TsTypeRef(type_ref),
+                            ..
+                        }),
+                        ..
+                    }) => type_ref.clone(),
+                _ => todo!("unsupported function parameters: try simplifying the method's signature")
+            }
+        }).collect();
+
         let return_type = n.function.return_type.as_ref()
             .and_then(|t| t.type_ann.as_ts_type_ref())
             .cloned();
 
         Some(Self {
-            params: vec![],  // TODO(brokad)
+            params,
             return_type,
-            hint,
+            hint
         })
     }
 }
 
 pub struct Compiler {
-    task_map: Rc<TaskMapResource>,
+    type_map: TypeAliasMap,
+    task_map: TaskMap,
     source_map: Arc<SourceMap>,
     swc_compiler: swc::Compiler
 }
+
+pub struct CompilerResource(RefCell<Compiler>);
+
+impl CompilerResource {
+    pub fn borrow_mut(&self) -> RefMut<'_, Compiler> {
+        self.0.borrow_mut()
+    }
+
+    pub async fn load_module_impl(self: Rc<Self>, module_specifier: ModuleSpecifier) -> Result<ModuleSource, Error> {
+        let mut locked = self.borrow_mut();
+        let source = locked.fetch_source(module_specifier).await?;
+        locked.load_module(source).await
+    }
+}
+
+impl Resource for CompilerResource {}
+
+// Same pattern as the other resources, make compiler methods mutating, etc
 
 pub struct RawModuleSource {
     module_specifier: ModuleSpecifier,
@@ -224,14 +246,15 @@ pub struct RawModuleSource {
 }
 
 impl Compiler {
-    pub fn into_module_loader(self) -> PassthruModuleLoader {
-        PassthruModuleLoader(Rc::new(self))
+    pub fn into_resource(self) -> CompilerResource {
+        CompilerResource(RefCell::new(self))
     }
 
     pub fn new() -> Self {
         let source_map = Arc::new(SourceMap::new(FilePathMapping::empty()));
         Self {
-            task_map: todo!(),
+            type_map: TypeAliasMap::default(),
+            task_map: TaskMap::default(),
             swc_compiler: swc::Compiler::new(source_map.clone()),
             source_map
         }
@@ -278,7 +301,7 @@ impl Compiler {
 
     #[tracing::instrument]
     pub fn load_module(
-        &self,
+        &mut self,
         RawModuleSource {
             module_specifier,
             media_type,
@@ -286,36 +309,28 @@ impl Compiler {
         }: RawModuleSource) -> Result<ModuleSource, Error> {
         let module_type = Self::module_type_from_media_type(&media_type);
 
-        if Self::should_process_from_media_type(&media_type) {
-            let parsed = deno_ast::parse_module_with_post_process(ParseParams {
+        let source_text = if Self::should_process_from_media_type(&media_type) {
+            let parsed = deno_ast::parse_module(ParseParams {
                 specifier: module_specifier.to_string(),
                 text_info: SourceTextInfo::new(source_file.src.into()),
                 media_type,
                 capture_tokens: false,
                 scope_analysis: true,
                 maybe_syntax: None,
-            }, |mut module| {
-                let type_alias_map = TypeAliasVisitor::new().run(&module);
-
-                let emitter = CompileMessageEmitter::new(
-                    module_specifier.as_str(),
-                    source_text.as_str(),
-                    stderr()
-                ).unwrap();
-
-                let visited_tasks = TaskVisitor::new(
-                    &type_alias_map,
-                    emitter,
-                ).run(&mut module);
-
-                // TODO(brokad): this is unhygienic
-                self.task_map.0.borrow_mut().0.extend(visited_tasks.0.into_iter());
-
-                module
             }).unwrap();
 
-            source_text = parsed.transpile(&Default::default())?.text;
-        }
+            let module = parsed.module();
+
+            TypeAliasVisitor::new(&mut self.type_map)
+                .run(module);
+
+            TaskVisitor::new(&mut self.task_map)
+                .run(module);
+
+            parsed.transpile(&Default::default())?.text;
+        } else {
+            source_file.src.to_string()
+        };
 
         Ok(ModuleSource::new(
             module_type,
@@ -323,14 +338,15 @@ impl Compiler {
             &module_specifier,
         ))
     }
-
-    pub async fn load_module_impl(self: Rc<Self>, module_specifier: ModuleSpecifier) -> Result<ModuleSource, Error> {
-        let source = self.fetch_source(module_specifier).await?;
-        self.load_module(source).await
-    }
 }
 
-pub struct PassthruModuleLoader(pub Rc<Compiler>);
+pub struct PassthruModuleLoader(Rc<CompilerResource>);
+
+impl PassthruModuleLoader {
+    pub fn from_compiler_resource(compiler_resource: Rc<CompilerResource>) -> Self {
+        Self(compiler_resource)
+    }
+}
 
 impl ModuleLoader for PassthruModuleLoader {
     fn resolve(
