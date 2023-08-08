@@ -3,17 +3,15 @@ use std::cell::{RefCell, RefMut};
 use std::error::Error as StdError;
 use std::path::PathBuf;
 use std::collections::HashMap;
+use std::io::{BufWriter, Cursor};
 use std::ops::Deref;
 use std::rc::Rc;
-use std::sync::Arc;
 use deno_ast::ModuleSpecifier;
 use serde::{Serialize, Deserialize};
 
 use deno_core::{op, v8, Op, JsRuntime, ModuleId, ResourceId, OpState, AsyncRefCell, Resource, AsyncMutFuture, AsyncRefFuture, RcRef, Extension};
 use deno_core::error::AnyError;
-use deno_core::v8::HandleScope;
 use futures::{SinkExt, TryFutureExt};
-use swc::TransformOutput;
 use crate::client::{Client, Session};
 
 mod compile;
@@ -23,7 +21,7 @@ use emit::Emitter;
 use crate::error::Error;
 use crate::proto::{MessageBuilder, MessageCode};
 use crate::proto::trackway::MessageType;
-use crate::runtime::compile::{Compiler, PassthruModuleLoader, TaskMapResource};
+use crate::runtime::compile::{Compiler, CompilerResource, PassthruModuleLoader};
 
 const CLIENT_RID: ResourceId = 0;
 const COMPILER_RID: ResourceId = 1;
@@ -32,7 +30,7 @@ const COMPILER_RID: ResourceId = 1;
 pub struct NewInstanceMessage {
     task_name: String,
     task_description: String,
-    task_context: Arc<TransformOutput>
+    task_context: String
 }
 
 #[derive(Deserialize)]
@@ -176,7 +174,7 @@ impl Instance {
         Ok(Some(slot_id))
     }
 
-    pub fn run<'s>(&mut self, scope: &mut HandleScope<'s>, slot_id: SlotId) -> Result<(), Error> {
+    pub fn run<'s>(&mut self, scope: &mut v8::HandleScope<'s>, slot_id: SlotId) -> Result<(), Error> {
         let slot = match self.slots.remove(&slot_id).unwrap() {
             Slot::Source(source_code) => {
                 // TODO(brokad): Run this in isolate
@@ -213,25 +211,45 @@ impl InstanceResource {
 #[tracing::instrument(skip(state))]
 async fn task_register_instance(
     state: Rc<RefCell<OpState>>,
-    task_id: String
-) -> ResourceId {
-    let (task_map, op_client) = {
+    task_name: String
+) -> Result<ResourceId, AnyError> {
+    let (compiler, op_client) = {
         let resource_table = &mut state.borrow_mut().resource_table;
         (
-            resource_table.get::<TaskMapResource>(COMPILER_RID).unwrap(),
+            resource_table.get::<CompilerResource>(COMPILER_RID).unwrap(),
             resource_table.get::<ClientResource>(CLIENT_RID).unwrap()
         )
     };
 
-    let mut session = op_client.borrow_mut().await.new_session().await?;
+    let mut session = op_client.borrow_mut().await.new_session().await.unwrap();
 
-    session.do_handshake().await?;
+    session.do_handshake().await.unwrap();
 
-    // TODO(brokad): Send NewTaskMessage; probably put `Compiler` in `resource_table`
+    let mut buf = Vec::new();
+    compiler.borrow_mut().print_task_context(&task_name, Cursor::new(&mut buf)).unwrap();
+    let task_context = String::from_utf8(buf).unwrap();
+
+    let task_description = compiler.borrow_mut().get_task_description(&task_name).unwrap();
+
+    let msg = NewInstanceMessage {
+        task_name,
+        task_description,
+        task_context
+    };
+
+    MessageBuilder::new()
+        .message_type(MessageType::MessageControl)
+        .code(MessageCode::Task)
+        .data(&serde_json::to_string(&msg).unwrap())
+        .send(&session)
+        .await
+        .unwrap();
 
     let instance = Instance::from_session(session);
 
-    state.borrow_mut().resource_table.add(instance.into_resource())
+    let resource_id = state.borrow_mut().resource_table.add(instance.into_resource());
+
+    Ok(resource_id)
 }
 
 #[op]
@@ -248,10 +266,10 @@ async fn task_poll_instance(
         .map_err(|_| todo!())
 }
 
-#[op]
+#[op(v8)]
 #[tracing::instrument(skip(state))]
 fn task_run_with_side_effects<'s>(
-    scope: &mut HandleScope<'s>,
+    scope: &mut v8::HandleScope<'s>,
     state: Rc<RefCell<OpState>>,
     instance_id: ResourceId,
     slot_id: Option<ResourceId>,
@@ -259,7 +277,8 @@ fn task_run_with_side_effects<'s>(
     if let Some(slot_id) = slot_id {
         InstanceResource::from_op_state(state, instance_id)
             .borrow_mut()
-            .run(scope, slot_id)?;
+            .run(scope, slot_id)
+            .unwrap();
     }
     Ok(())
 }

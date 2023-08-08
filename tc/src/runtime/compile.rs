@@ -1,16 +1,19 @@
 use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::rc::Rc;
 use std::sync::Arc;
 use deno_ast::{MediaType, ParseParams, SourceTextInfo};
 use deno_ast::swc::visit::{VisitMut, Visit};
 use deno_ast::swc::ast::{CallExpr, ClassDecl, Ident, Param, Str, TsTypeAliasDecl, TsTypeRef, Lit, Decorator, Class, ClassMethod, Module, Id, TsTypeAnn, Pat, BindingIdent, TsType};
+use deno_ast::swc::codegen::{Node, self};
 use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap};
 use deno_core::{ModuleCode, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, futures::FutureExt, Resource};
+use deno_core::error::AnyError;
 use tonic::codegen::Body;
 use crate::error::Error;
 
-use super::emit::{Emitter, Level};
+use super::emit::Emitter;
 
 const TASK_WARN_MIN_SIZE: usize = 12;
 const HINT_WARN_MIN_SIZE: usize = 12;
@@ -47,7 +50,7 @@ impl<'m> TypeAliasVisitor<'m> {
     }
 }
 
-impl Visit for TypeAliasVisitor {
+impl<'m> Visit for TypeAliasVisitor<'m> {
     fn visit_ts_type_alias_decl(&mut self, n: &TsTypeAliasDecl) {
         self.0.insert_decl(n.id.to_id(), n.clone());
     }
@@ -80,6 +83,7 @@ impl MatchCallStrLit {
     }
 }
 
+// TODO(brokad): Should `Ident` be `Id`?
 #[derive(Debug, Clone)]
 pub struct Task {
     name: Ident,
@@ -192,12 +196,14 @@ impl TaskMethod {
             match &param.pat {
                 Pat::Ident(
                     BindingIdent {
-                        type_ann: Some(TsTypeAnn {
-                            type_ann: TsType::TsTypeRef(type_ref),
-                            ..
-                        }),
+                        type_ann: Some(type_ann),
                         ..
-                    }) => type_ref.clone(),
+                    }) => {
+                    match type_ann.type_ann.as_ref() {
+                        TsType::TsTypeRef(type_ref) => type_ref.clone(),
+                        _ => todo!("unsupported")
+                    }
+                },
                 _ => todo!("unsupported function parameters: try simplifying the method's signature")
             }
         }).collect();
@@ -217,8 +223,7 @@ impl TaskMethod {
 pub struct Compiler {
     type_map: TypeAliasMap,
     task_map: TaskMap,
-    source_map: Arc<SourceMap>,
-    swc_compiler: swc::Compiler
+    source_map: Rc<SourceMap>
 }
 
 pub struct CompilerResource(RefCell<Compiler>);
@@ -228,21 +233,20 @@ impl CompilerResource {
         self.0.borrow_mut()
     }
 
-    pub async fn load_module_impl(self: Rc<Self>, module_specifier: ModuleSpecifier) -> Result<ModuleSource, Error> {
+    pub async fn load_module_impl(self: Rc<Self>, module_specifier: ModuleSpecifier) -> Result<ModuleSource, AnyError> {
         let mut locked = self.borrow_mut();
-        let source = locked.fetch_source(module_specifier).await?;
-        locked.load_module(source).await
+        let source = locked.fetch_source(module_specifier).unwrap();
+        let module_source = locked.load_module(source).unwrap();
+        Ok(module_source)
     }
 }
 
 impl Resource for CompilerResource {}
 
-// Same pattern as the other resources, make compiler methods mutating, etc
-
 pub struct RawModuleSource {
     module_specifier: ModuleSpecifier,
     media_type: MediaType,
-    source_file: Arc<SourceFile>,
+    source_file: Rc<SourceFile>,
 }
 
 impl Compiler {
@@ -251,16 +255,60 @@ impl Compiler {
     }
 
     pub fn new() -> Self {
-        let source_map = Arc::new(SourceMap::new(FilePathMapping::empty()));
+        let source_map = Rc::new(SourceMap::new(FilePathMapping::empty()));
         Self {
             type_map: TypeAliasMap::default(),
             task_map: TaskMap::default(),
-            swc_compiler: swc::Compiler::new(source_map.clone()),
             source_map
         }
     }
 
-    #[tracing::instrument]
+    pub fn print_task_context<W: Write>(&self, task_name: &str, mut writer: W) -> Result<(), Error> {
+        let task = self.task_map.get(&task_name).unwrap();
+
+        let source_map = self.source_map.clone();
+        let type_map = &self.type_map;
+
+        let mut emitter = codegen::Emitter {
+            cfg: codegen::Config::default(),
+            cm: source_map.clone(),
+            comments: None,
+            wr: codegen::text_writer::JsWriter::new(source_map.clone(), "\n", writer, None)
+        };
+
+        let mut type_closure = HashSet::new();
+
+        let output_type_ref = task.output.type_name.clone().ident().unwrap().to_id();
+        type_closure.insert(output_type_ref);
+
+        for task_method in task.methods.values() {
+            let output_type_ref = task_method.return_type.as_ref().unwrap().type_name.clone().ident().unwrap().to_id();
+            type_closure.insert(output_type_ref);
+
+            for param in &task_method.params {
+                let param_type_ref = param.type_name.clone().ident().unwrap().to_id();
+                type_closure.insert(param_type_ref);
+            }
+        }
+
+        for type_ref in type_closure {
+            if let Some(type_decl) = type_map.get_decl(&type_ref) {
+                type_decl.emit_with(&mut emitter).unwrap();
+            }
+        }
+
+        for task_method in task.methods.values() {
+            todo!();
+        }
+
+        Ok(())
+    }
+
+    pub fn get_task_description(&self, task_name: &str) -> Result<String, Error> {
+        Ok(self.task_map.get(task_name).unwrap().description.value.to_string())
+    }
+
+    #[tracing::instrument(skip(self))]
     pub fn fetch_source(&self, module_specifier: ModuleSpecifier) -> Result<RawModuleSource, Error> {
         let (media_type, source_file) = if module_specifier.scheme() == "file" {
             let path = module_specifier.to_file_path().unwrap();
@@ -299,7 +347,7 @@ impl Compiler {
         }
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     pub fn load_module(
         &mut self,
         RawModuleSource {
@@ -312,7 +360,7 @@ impl Compiler {
         let source_text = if Self::should_process_from_media_type(&media_type) {
             let parsed = deno_ast::parse_module(ParseParams {
                 specifier: module_specifier.to_string(),
-                text_info: SourceTextInfo::new(source_file.src.into()),
+                text_info: SourceTextInfo::from_string(source_file.src.to_string()),
                 media_type,
                 capture_tokens: false,
                 scope_analysis: true,
@@ -327,7 +375,7 @@ impl Compiler {
             TaskVisitor::new(&mut self.task_map)
                 .run(module);
 
-            parsed.transpile(&Default::default())?.text;
+            parsed.transpile(&Default::default())?.text
         } else {
             source_file.src.to_string()
         };
