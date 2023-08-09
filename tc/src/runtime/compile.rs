@@ -8,6 +8,7 @@ use deno_ast::swc::ast::{self, CallExpr, ClassDecl, Ident, Str, TsTypeAliasDecl,
 use deno_ast::swc::codegen::{Node, self};
 use deno_ast::swc::codegen::text_writer::WriteJs;
 use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap, Span};
+use deno_ast::swc::utils::quote_ident;
 use deno_ast::swc::visit;
 use deno_core::{ModuleCode, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, futures::FutureExt, Resource};
 use deno_core::error::AnyError;
@@ -114,7 +115,7 @@ pub struct Task {
     name: Ident,
     description: Str,
     output: TsType,
-    methods: HashMap<Ident, TaskMethod>,
+    methods: HashMap<String, TaskMethod>,
 }
 
 impl Task {
@@ -132,7 +133,7 @@ impl Task {
 
         let methods = n.class.body.iter().filter_map(|member| member.as_method())
             .filter_map(|method| {
-                Some((method.key.as_ident()?.clone(), TaskMethod::from_method(method)?))
+                Some((method.key.as_ident()?.to_id().0.to_string(), TaskMethod::from_method(method)?))
             })
             .collect();
 
@@ -186,20 +187,6 @@ impl<'m> TaskVisitor<'m> {
 impl<'m> Visit for TaskVisitor<'m> {
     fn visit_class_decl(&mut self, n: &ClassDecl) {
         if let Some(task) = Task::match_class_decl(n) {
-            /*
-            // short description for @task
-            if task.description.value.split(" ").count() < TASK_WARN_MIN_SIZE {
-                self.emitter.emit(&task.description.span, Level::WARN, "the `@task` description is short: try expanding on what the task does");
-            }
-
-            for (_, TaskMethod { hint, .. }) in &task.methods {
-                // short description for @hint (method)
-                if hint.value.split(" ").count() < HINT_WARN_MIN_SIZE {
-                    self.emitter.emit(&hint.span, Level::WARN, "the `@hint` description is short: try expanding on how the method is used");
-                }
-            }
-             */
-
             // TODO(brokad): this is unhygienic
             self.task_map.insert(n.ident.to_id().0.to_string(), task);
         }
@@ -208,6 +195,7 @@ impl<'m> Visit for TaskVisitor<'m> {
 
 #[derive(Debug, Clone)]
 pub struct TaskMethod {
+    ident: Ident,
     params: Vec<TsType>,
     return_type: Option<TsType>,
     hint: Str,
@@ -229,6 +217,8 @@ impl TaskMethod {
 
     #[tracing::instrument]
     pub fn from_method(n: &ClassMethod) -> Option<Self> {
+        let ident = n.key.as_ident().unwrap().clone();
+
         let hint = MatchCallStrLit::new("hint").first_match_decorator(&n.function.decorators)?;
 
         let params = n.function.params.iter().map(|param| {
@@ -245,6 +235,7 @@ impl TaskMethod {
             .cloned();
 
         Some(Self {
+            ident,
             params,
             return_type,
             hint
@@ -296,6 +287,7 @@ impl Compiler {
     }
 
     // TODO(brokad): Very hacky
+    #[tracing::instrument(skip(self, writer))]
     pub fn print_task_context<W: Write>(&self, task_name: &str, mut writer: W) -> Result<(), Error> {
         let task = self.task_map.get(&task_name).unwrap();
 
@@ -371,7 +363,7 @@ impl Compiler {
                 }
             }).collect();
             let function = ast::FnDecl {
-                ident: task_ident.clone(),
+                ident: quote_ident!(task_ident.to_string()),
                 declare: false,
                 function: Box::new(ast::Function {
                     params,
