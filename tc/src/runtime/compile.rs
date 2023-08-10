@@ -1,13 +1,13 @@
 use std::cell::{RefCell, RefMut};
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::rc::Rc;
 use deno_ast::{MediaType, ParseParams, SourceTextInfo};
 use deno_ast::swc::visit::{VisitMut, Visit};
-use deno_ast::swc::ast::{self, CallExpr, ClassDecl, Ident, Str, TsTypeAliasDecl, Lit, Decorator, Class, ClassMethod, Module, Id, TsTypeAnn, Pat, TsType};
+use deno_ast::swc::ast::{self, CallExpr, ClassDecl, Ident, Str, TsTypeAliasDecl, Lit, Decorator, Class, ClassMethod, Module, Id, TsTypeAnn, Pat, TsType, SourceMapperExt};
 use deno_ast::swc::codegen::{Node, self};
-use deno_ast::swc::codegen::text_writer::WriteJs;
-use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap, Span};
+use deno_ast::swc::codegen::text_writer::{JsWriter, WriteJs};
+use deno_ast::swc::common::{FilePathMapping, SourceFile, SourceMap, SourceMapper, Span};
 use deno_ast::swc::utils::quote_ident;
 use deno_ast::swc::visit;
 use deno_core::{ModuleCode, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, futures::FutureExt, Resource};
@@ -286,20 +286,28 @@ impl Compiler {
         }
     }
 
-    // TODO(brokad): Very hacky
-    #[tracing::instrument(skip(self, writer))]
-    pub fn print_task_context<W: Write>(&self, task_name: &str, mut writer: W) -> Result<(), Error> {
-        let task = self.task_map.get(&task_name).unwrap();
-
-        let source_map = self.source_map.clone();
-        let type_map = &self.type_map;
-
-        let mut emitter = codegen::Emitter {
+    pub fn get_emitter<'w, W: Write>(
+        &self,
+        writer: W
+    ) -> codegen::Emitter<'w, impl WriteJs, impl SourceMapper + SourceMapperExt> {
+        codegen::Emitter {
             cfg: codegen::Config::default(),
-            cm: source_map.clone(),
+            cm: self.source_map.clone(),
             comments: None,
-            wr: codegen::text_writer::JsWriter::new(source_map.clone(), "\n", writer, None)
-        };
+            wr: JsWriter::new(
+                self.source_map.clone(),
+                "\n",
+                writer,
+                None
+            )
+        }
+    }
+
+    pub fn get_type_context(&self, task_name: &str) -> Result<Vec<String>, Error> {
+        let mut output = Vec::new();
+
+        let task = self.task_map.get(&task_name).unwrap();
+        let type_map = &self.type_map;
 
         let mut to_visit = Vec::new();
 
@@ -332,58 +340,70 @@ impl Compiler {
 
         for type_ref in type_closure {
             if let Some(type_decl) = type_map.get_decl(&type_ref) {
+                let mut buf = Vec::new();
+                let mut emitter = self.get_emitter(Cursor::new(&mut buf));
                 type_decl.emit_with(&mut emitter).unwrap();
-                emitter.wr.write_line().unwrap();
+                drop(emitter);
+                output.push(String::from_utf8(buf).unwrap())
             }
         }
 
-        for (task_ident, task_method) in task.methods.iter() {
-            emitter.wr.write_line().unwrap();
-            emitter.wr.write_str(&format!("\n// hint: {}", task_method.hint.value)).unwrap();
-            emitter.wr.write_line().unwrap();
-            let param_ident = Ident::new("_".into(), Span::default());
-            let return_type = task_method.return_type.as_ref().map(|rt| {
-                Box::new(ast::TsTypeAnn {
-                    span: Span::default(),
-                    type_ann: Box::new(rt.clone())
-                })
-            });
-            let params: Vec<_> = task_method.params.iter().map(|param_type| {
-                let binding = ast::BindingIdent {
-                    id: param_ident.clone(),
-                    type_ann: Some(Box::new(ast::TsTypeAnn {
-                        span: Span::default(),
-                        type_ann: Box::new(param_type.clone())
-                    }))
-                };
-                ast::Param {
-                    span: Span::default(),
-                    decorators: Vec::new(),
-                    pat: binding.into()
-                }
-            }).collect();
-            let function = ast::FnDecl {
-                ident: quote_ident!(task_ident.to_string()),
-                declare: false,
-                function: Box::new(ast::Function {
-                    params,
-                    decorators: Vec::new(),
-                    span: Span::default(),
-                    body: None,
-                    is_generator: false,
-                    is_async: false,
-                    type_params: None,
-                    return_type
-                })
-            };
-            function.emit_with(&mut emitter);
-        }
-
-        Ok(())
+        Ok(output)
     }
 
-    pub fn get_task_description(&self, task_name: &str) -> Result<String, Error> {
-        Ok(self.task_map.get(task_name).unwrap().description.value.to_string())
+    pub fn get_method_decl(&self, task_name: &str, property_key: &str) -> Result<String, Error> {
+        let mut buf = Vec::new();
+        let mut emitter = self.get_emitter(Cursor::new(&mut buf));
+
+        let method = self.task_map
+            .get(task_name)
+            .and_then(|task| task.methods.get(property_key))
+            .unwrap();
+
+        let param_ident = Ident::new("_".into(), Span::default());
+
+        let return_type = method.return_type.as_ref().map(|rt| {
+            Box::new(ast::TsTypeAnn {
+                span: Span::default(),
+                type_ann: Box::new(rt.clone())
+            })
+        });
+
+        let params: Vec<_> = method.params.iter().map(|param_type| {
+            let binding = ast::BindingIdent {
+                id: param_ident.clone(),
+                type_ann: Some(Box::new(ast::TsTypeAnn {
+                    span: Span::default(),
+                    type_ann: Box::new(param_type.clone())
+                }))
+            };
+            ast::Param {
+                span: Span::default(),
+                decorators: Vec::new(),
+                pat: binding.into()
+            }
+        }).collect();
+
+        let function = ast::FnDecl {
+            ident: quote_ident!(property_key.to_string()),
+            declare: false,
+            function: Box::new(ast::Function {
+                params,
+                decorators: Vec::new(),
+                span: Span::default(),
+                body: None,
+                is_generator: false,
+                is_async: false,
+                type_params: None,
+                return_type
+            })
+        };
+
+        function.emit_with(&mut emitter).unwrap();
+
+        drop(emitter);
+
+        Ok(String::from_utf8(buf).unwrap())
     }
 
     #[tracing::instrument(skip(self))]

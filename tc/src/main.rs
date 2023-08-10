@@ -2,16 +2,15 @@ use std::path::{Path, PathBuf};
 
 use std::process::exit;
 use clap::{Parser, Subcommand};
+use deno_runtime::permissions::{Permissions, PermissionsContainer};
 use tracing_subscriber::prelude::*;
 use tracing::{event, Level};
-use crate::client::Client;
-use crate::runtime::Runtime;
 
 pub mod proto;
-pub mod client;
 pub mod error;
 pub mod runtime;
 pub mod config;
+pub mod client;
 
 /// The Trackway agent.
 /// Find out more at https://trackway.ai
@@ -32,22 +31,38 @@ impl Cli {
 
     pub async fn run_script<P: AsRef<Path>>(script_path: P) -> Result<(), error::Error> {
         let cfg = config::Config::load().await?;
-
+        /*
         let token = cfg.token.as_ref().expect("you must run `login` first");
         let server_url = "http://localhost:8000";
-
         event!(Level::INFO, "connecting to {server_url}");
-        let client = Client::new(server_url, token).await;
+         */
 
-        let mut runtime = Runtime::new_with_client(client);
-        let module_specifier = deno_core::resolve_path(
-            script_path.as_ref().to_str().unwrap(),
-            &std::env::current_dir().unwrap()
-        )?;
+        let flags = deno::args::flags_from_vec(vec![
+            "deno".to_string(),
+            "run".to_string(),
+            script_path.as_ref().to_string_lossy().to_string()
+        ]).unwrap();
+        let factory = deno::factory::CliFactory::from_flags(flags).await?;
+        let cli_options = factory.cli_options();
 
-        let module_id = runtime.load_main_module(&module_specifier).await?;
+        let main_module = cli_options.resolve_main_module()?;
 
-        runtime.evaluate_module(module_id).await?;
+        let permissions = PermissionsContainer::new(Permissions::from_options(
+            &cli_options.permissions_options(),
+        )?);
+        let worker_factory = factory.create_cli_main_worker_factory().await?;
+        let mut worker = worker_factory
+            .create_custom_worker(
+                main_module,
+                permissions,
+                vec![
+                    runtime::ext::my_extension::default()
+                ],
+                Default::default(),
+            )
+            .await?;
+
+        let exit_code = worker.run().await?;
 
         Ok(())
     }
@@ -74,8 +89,7 @@ pub enum Commands {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(tracing_subscriber::fmt::layer());
@@ -86,10 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Cli::parse();
 
-    if let Err(err) = cli.do_cli().await {
-        eprintln!("error: {err:?}");
-        exit(1)
-    } else {
-        exit(0)
-    }
+    deno_runtime::tokio_util::create_and_run_current_thread(cli.do_cli()).unwrap();
+
+    Ok(())
 }
