@@ -4,6 +4,7 @@ use anyhow::Error as AnyError;
 use deno_ast::swc::ast;
 use deno_ast::swc::visit;
 use deno_ast::swc::codegen;
+use deno_ast::swc::common;
 
 mod args;
 mod util;
@@ -16,12 +17,6 @@ use args::Flags;
 
 pub trait CanPush<T> {
     fn push(&mut self, item: T);
-}
-
-impl<T> CanPush<T> for Vec<T> {
-    fn push(&mut self, item: T) {
-        Vec::push(self, item)
-    }
 }
 
 async fn run_subcommand(flags: Flags) -> Result<i32, AnyError> {

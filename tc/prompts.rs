@@ -43,6 +43,7 @@ impl Deref for PromptId {
 #[serde(rename_all = "snake_case")]
 pub enum PromptType {
     PlainText,
+    #[serde(rename = "ts")]
     TypeScript
 }
 
@@ -91,6 +92,15 @@ impl<'p, C> PromptsWriter<'p, C> {
     pub fn set_fmt<S: AsRef<str>>(&mut self, fmt: S) -> Result<(), InvalidPromptError> {
         self.modified = true;
         self.builder.fmt = PromptFmt(fmt.as_ref().into());
+        Ok(())
+    }
+
+    pub fn add_to_context<I, S>(&mut self, iter: I) -> Result<(), InvalidPromptError>
+    where
+        I: Iterator<Item = S>,
+        S: AsRef<str>
+    {
+        self.builder.context.extend(iter.map(|s| PromptId(s.as_ref().into())));
         Ok(())
     }
 

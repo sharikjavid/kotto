@@ -1,10 +1,13 @@
+use std::collections::HashSet;
 use std::path::Path;
 
-use crate::AnyError;
-use crate::{filter, codegen, emit, util};
+use crate::{AnyError, CanPush};
+use crate::{ast, filter, visit, codegen, emit, util, common};
 use crate::prompts::{Prompt, Prompts, PromptsWriter, PromptType};
 
+use visit::Visit;
 use codegen::Node;
+use common::AstNode;
 
 use tracing::{event, Level};
 
@@ -52,7 +55,7 @@ where
         let mut prompts: Vec<Prompt> = Vec::new();
         let mut prompt_writer = PromptsWriter::new(&mut prompts);
 
-        for type_alias_decl in filtered_module.type_alias_decls {
+        for type_alias_decl in filtered_module.type_alias_decls.values() {
             prompt_writer.set_id(format!("type_alias_decl.{}", type_alias_decl.id))?;
             prompt_writer.set_type(PromptType::TypeScript);
 
@@ -63,6 +66,35 @@ where
             prompt_writer.set_fmt(source_text)?;
 
             prompt_writer.push()?;
+        }
+
+        for class_decl in &filtered_module.class_decls {
+            for (prop_name, class_method) in &class_decl.class_methods {
+                let prop_ident = if let Some(prop_ident) = prop_name.clone().ident() {
+                    prop_ident
+                } else {
+                    continue
+                };
+
+                let id = format!("class_decl.{}.{}", class_decl.class_ident, prop_ident);
+                prompt_writer.set_id(id)?;
+                prompt_writer.set_type(PromptType::TypeScript);
+
+                let closure = filtered_module
+                    .find_closure_of_type_refs(&class_method.type_refs)
+                    .into_iter()
+                    .map(|id| format!("type_alias_decl.{}", ast::Ident::from(id)));
+
+                prompt_writer.add_to_context(closure)?;
+
+                let mut buf = Vec::new();
+                let mut emitter = emit::Emitter::new(&mut buf);
+                class_method.emit_with(&mut emitter)?;
+                let source_text = String::from_utf8(buf)?;
+                prompt_writer.set_fmt(source_text)?;
+
+                prompt_writer.push()?;
+            }
         }
 
         let prompts = Prompts(prompts);
