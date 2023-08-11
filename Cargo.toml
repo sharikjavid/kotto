@@ -4,5 +4,11 @@ members = [
     "tc"
 ]
 
+[workspace.package]
+authors = ["the Trackway authors"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/brokad/trackway"
+
 [workspace.dependencies]
 deno_ast = { version = "0.27.0", features = [ "transpiling", "codegen" ] }
