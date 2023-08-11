@@ -17,7 +17,6 @@ path = "main.rs"
 [dependencies]
 serde = { version = "1.0.171", features = [ "derive" ] }
 serde_json = "1.0.102"
-toml = "0.7.6"
 
 anyhow = { workspace = true }
 
@@ -26,24 +25,12 @@ tracing-log = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 home = "0.5.5"
-semver = "1.0.17"
 
 atty = "0.2.14"
 colored = "2.0.4"
 
 clap = { version = "4.3.3", features = [ "derive", "env" ] }
 
-tonic = "0.9.2"
-prost = "0.11.9"
-
-futures = "0.3.28"
 tokio = { version = "1.29.1", features = [ "full" ] }
 
 deno_ast = { workspace = true }
-
-serde_v8 = "0.110.0"
-
-
-
-[build-dependencies]
-tonic-build = "0.9.2"
