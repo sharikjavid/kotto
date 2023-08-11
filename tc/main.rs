@@ -1,106 +1,53 @@
-use std::path::{Path, PathBuf};
+use clap::Parser;
+use anyhow::Error as AnyError;
 
-use std::process::exit;
-use clap::{Parser, Subcommand};
-use deno_runtime::permissions::{Permissions, PermissionsContainer};
-use tracing_subscriber::prelude::*;
-use tracing::{event, Level};
+use deno_ast::swc::ast;
+use deno_ast::swc::visit;
+use deno_ast::swc::codegen;
 
-pub mod proto;
-pub mod error;
-pub mod runtime;
-pub mod config;
-pub mod client;
+mod args;
+mod util;
+mod prompts;
+mod tasks;
+mod filter;
+mod emit;
 
-/// The Trackway agent.
-/// Find out more at https://trackway.ai
-#[derive(Parser, Debug)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands
+use args::Flags;
+
+pub trait CanPush<T> {
+    fn push(&mut self, item: T);
 }
 
-impl Cli {
-    pub async fn do_cli(self) -> Result<(), error::Error> {
-        match self.command {
-            Commands::Run { script } => Self::run_script(script).await,
-            Commands::Submit { .. } => todo!(),
-            Commands::Login { token } => Self::login(token).await
+impl<T> CanPush<T> for Vec<T> {
+    fn push(&mut self, item: T) {
+        Vec::push(self, item)
+    }
+}
+
+async fn run_subcommand(flags: Flags) -> Result<i32, AnyError> {
+    tasks::compile_prompts(&flags.paths).await?;
+    Ok(0)
+}
+
+fn unwrap_or_exit<T>(result: Result<T, AnyError>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(err) => {
+            // TODO
+            let error_code = 1;
+            eprintln!("{}", err);
+            std::process::exit(error_code)
         }
     }
-
-    pub async fn run_script<P: AsRef<Path>>(script_path: P) -> Result<(), error::Error> {
-        let cfg = config::Config::load().await?;
-        /*
-        let token = cfg.token.as_ref().expect("you must run `login` first");
-        let server_url = "http://localhost:8000";
-        event!(Level::INFO, "connecting to {server_url}");
-         */
-
-        let flags = deno::args::flags_from_vec(vec![
-            "deno".to_string(),
-            "run".to_string(),
-            script_path.as_ref().to_string_lossy().to_string()
-        ]).unwrap();
-        let factory = deno::factory::CliFactory::from_flags(flags).await?;
-        let cli_options = factory.cli_options();
-
-        let main_module = cli_options.resolve_main_module()?;
-
-        let permissions = PermissionsContainer::new(Permissions::from_options(
-            &cli_options.permissions_options(),
-        )?);
-        let worker_factory = factory.create_cli_main_worker_factory().await?;
-        let mut worker = worker_factory
-            .create_custom_worker(
-                main_module,
-                permissions,
-                vec![
-                    runtime::ext::my_extension::default()
-                ],
-                Default::default(),
-            )
-            .await?;
-
-        let exit_code = worker.run().await?;
-
-        Ok(())
-    }
-
-    pub async fn login(token: Option<String>) -> Result<(), error::Error> {
-        let mut cfg = config::Config::load().await?;
-        cfg.token = Some(token.expect("--token is required"));
-        cfg.save().await
-    }
 }
 
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    Run {
-        script: PathBuf
-    },
-    Submit {
+#[tokio::main]
+async fn main() {
+    util::setup_tracing().unwrap();
 
-    },
-    Login {
-        /// Set the agent token
-        #[arg(long)]
-        token: Option<String>
-    }
-}
+    let flags = Flags::parse();
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(tracing_subscriber::fmt::layer());
+    let exit_code = unwrap_or_exit(run_subcommand(flags).await);
 
-    tracing::subscriber::set_global_default(subscriber)?;
-
-    tracing_log::LogTracer::init()?;
-
-    let cli = Cli::parse();
-
-    deno_runtime::tokio_util::create_and_run_current_thread(cli.do_cli()).unwrap();
-
-    Ok(())
+    std::process::exit(exit_code)
 }

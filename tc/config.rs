@@ -9,7 +9,6 @@ use crate::error::Error;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    pub token: Option<String>
 }
 
 impl Config {
