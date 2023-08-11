@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use deno_ast::SourceRangedForSpanned;
+use std::hash::Hash;
 
 use crate::ast;
 use crate::visit;
@@ -48,9 +48,9 @@ impl<T> CanPush<T> for Vec<T> {
     }
 }
 
-impl<T> CanPush<T> for HashSet<T> {
+impl<T: Hash + Eq> CanPush<T> for HashSet<T> {
     fn push(&mut self, item: T) {
-        HashSet::push(self, item)
+        HashSet::insert(self, item);
     }
 }
 

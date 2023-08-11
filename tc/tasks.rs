@@ -1,13 +1,10 @@
-use std::collections::HashSet;
 use std::path::Path;
 
-use crate::{AnyError, CanPush};
-use crate::{ast, filter, visit, codegen, emit, util, common};
+use crate::AnyError;
+use crate::{ast, filter, codegen, emit, util};
 use crate::prompts::{Prompt, Prompts, PromptsWriter, PromptType};
 
-use visit::Visit;
 use codegen::Node;
-use common::AstNode;
 
 use tracing::{event, Level};
 
@@ -47,6 +44,7 @@ where
         let path = path.as_ref();
 
         let parsed_module = parse_module(&path).await?;
+        let comments = parsed_module.comments().as_single_threaded();
         let module = parsed_module.module();
 
         let filter_params = filter::FilterParams::default();
@@ -88,7 +86,8 @@ where
                 prompt_writer.add_to_context(closure)?;
 
                 let mut buf = Vec::new();
-                let mut emitter = emit::Emitter::new(&mut buf);
+                let mut emitter = emit::Emitter::new(&mut buf)
+                    .with_comments(&comments);
                 class_method.emit_with(&mut emitter)?;
                 let source_text = String::from_utf8(buf)?;
                 prompt_writer.set_fmt(source_text)?;

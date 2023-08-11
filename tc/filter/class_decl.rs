@@ -4,8 +4,6 @@ use std::ops::Deref;
 use crate::CanPush;
 use crate::{ast, visit};
 
-use visit::Visit;
-
 use crate::filter::{TypeRef, TypeRefVisitor};
 
 #[derive(Debug)]

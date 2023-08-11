@@ -5,6 +5,7 @@ use std::rc::Rc;
 use deno_ast::swc::common::SourceMap;
 
 use crate::codegen;
+use crate::common;
 
 pub struct Emitter<'a, W: Write>(
     pub codegen::Emitter<'a, codegen::text_writer::JsWriter<'a, W>, SourceMap>
@@ -38,5 +39,10 @@ impl<'a, W: Write> Emitter<'a, W> {
                 wr: codegen::text_writer::JsWriter::new(source_map, "\n", write, None)
             }
         )
+    }
+
+    pub fn with_comments(mut self, comments: &'a dyn common::comments::Comments) -> Self {
+        self.comments = Some(comments);
+        self
     }
 }
