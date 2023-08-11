@@ -1,9 +1,15 @@
 [package]
-name = "trackway-agent"
+name = "tc"
+description = "trackway (compile-time component)"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "tc"
+path = "main.rs"
 
 [dependencies]
 serde = { version = "1.0.171", features = [ "derive" ] }
@@ -24,10 +30,7 @@ prost = "0.11.9"
 futures = "0.3.28"
 tokio = { version = "1.29.1", features = [ "full" ] }
 
-deno = { path = "vendored/deno/cli" }
-deno_core = "0.199.0"
-deno_runtime = { path = "vendored/deno/runtime" }
-deno_ast = { version = "0.27.0", features = [ "transpiling", "codegen" ] }
+deno_ast = { workspace = true }
 
 serde_v8 = "0.110.0"
 
