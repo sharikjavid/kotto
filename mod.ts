@@ -203,6 +203,8 @@ export class AgentController {
     history: Action[] = []
 
     constructor(agent: Agent) {
+        agent.is_done = false
+        agent.resolved = undefined
         this.agent = agent
         this.llm = new LLM()
         this.prompts = new Prompts(agent.prompts)
