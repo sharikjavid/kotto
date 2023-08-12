@@ -1,12 +1,11 @@
 import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
 
+import { parse as parsePath, join as joinPath } from "https://deno.land/std@0.198.0/path/mod.ts"
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
 export class Interrupt extends Error {
-    reason?: string
-
-    constructor(reason?: string) {
-        this.reason = reason
+    constructor(...args) {
+        super(...args)
     }
 }
 
@@ -60,6 +59,7 @@ class LLM {
 
     async call(messages: ChatCompletionRequestMessage[]): Promise<FunctionCall> {
         const resp = await this.send(messages)
+        console.log(colors.blue(`response: ${resp.content}`))
         return JSON.parse(resp.content)
     }
 }
@@ -85,11 +85,9 @@ type ConstructorDecorator = <T extends { new (...args: any[]): {} } >(constructo
 
 type MethodDecorator = (target: any, property_key: string, descriptor: PropertyDescriptor) => void
 
-const description_decorator = (description: string) => {
+const description_decorator = (task: string) => {
     return <T extends { new (...args: any[]): {} } >(constructor: T) => {
-        return class extends constructor {
-            description: string = description
-        }
+        constructor.prototype.task = task
     }
 }
 
@@ -178,7 +176,7 @@ export class Prompts {
     }
 }
 
-type LLMAction = {
+type Action = {
     call: FunctionCall,
     output?: any
 }
@@ -188,7 +186,7 @@ export class AgentController {
     llm: LLM
     prompts: Prompts
     do_init: Promise<void>
-    history: LLMAction[] = []
+    history: Action[] = []
 
     constructor(agent: Agent) {
         this.agent = agent
@@ -199,6 +197,17 @@ export class AgentController {
 
     async doInit() {
         await this.prompts.load()
+    }
+
+    outputTemplate(): string {
+        return blockQuote(`{
+   "name": "the name of the function you want to call",
+   "reasoning": "the reasoning that you've used to arrive to the conclusion you should use this function",
+   "arguments": [
+        // ... the arguments of the function you want to call
+   ] 
+}
+`, "json")
     }
 
     initialPrompt(): string {
@@ -219,15 +228,7 @@ I am going to feed this discussion to an API. So do not be verbose, just tell me
 to call, with what argument, and I will tell you what the returned value is. Each of your prompts must 
 be of the following JSON form:
 
-\`\`\`json
-{
-   "name": "the name of the function you want to call",
-   "reasoning": "the reasoning that you've used to arrive to the conclusion you should use this function",
-   "arguments": [
-        // ... the arguments of the function you want to call
-   ] 
-}
-\`\`\`
+${this.outputTemplate()}
 
 You must make sure that the function you are calling accepts the arguments you give it. This includes
 checking the arguments have the correct type for that function (refer to the types defined above, and the 
@@ -237,13 +238,13 @@ Let's begin!
 `
     }
 
-    async doAction(action: LLMAction) {
+    async doAction(action: Action) {
         const output = await (this.agent[action.call.name])(...action.call.arguments)
         action.output = output
         this.history.push(action)
     }
 
-    async doNext(prompt?: string): Promise<any> {
+    async doNext(prompt?: string, role?: string): Promise<any> {
         await this.do_init
 
         if (this.agent.is_done) {
@@ -259,8 +260,14 @@ Let's begin!
             }
         }
 
+        if (role === undefined) {
+            role = "system"
+        }
+
+        console.log(colors.yellow(`prompt: ${prompt}`))
+
         const response = await this.llm.call([{
-            "role": "user",
+            "role": role,
             "content": prompt
         }])
 
@@ -279,7 +286,15 @@ Let's begin!
             } catch (e) {
                 if (!(e instanceof Interrupt)) {
                     console.log(colors.red(`llm: exception thrown: ${e}, retrying`))
-                    resolved = await this.doNext(`Your last answer gave me an error: ${e}. Please try again!`)
+                    resolved = await this.doNext(`
+error: ${e}. 
+
+Remember, your answers must be valid JSON objects, conforming to the following format:
+
+${this.outputTemplate()}
+`)
+                } else {
+                    throw e
                 }
             }
         } while (!this.agent.is_done)

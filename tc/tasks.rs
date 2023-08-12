@@ -59,7 +59,8 @@ where
             prompt_writer.set_type(PromptType::TypeScript);
 
             let mut buf = Vec::new();
-            let mut emitter = emit::Emitter::new(&mut buf);
+            let mut emitter = emit::Emitter::new(&mut buf)
+                .with_comments(&comments);
             type_alias_decl.emit_with(&mut emitter)?;
             let source_text = String::from_utf8(buf)?;
             prompt_writer.set_fmt(source_text)?;
