@@ -8,7 +8,7 @@ use crate::filter::{TypeRef, TypeRefVisitor};
 
 #[derive(Debug)]
 pub struct ClassDecl {
-    pub class_ident: ast::Ident,
+    pub class_decl: ast::ClassDecl,
     pub class_methods: HashMap<ast::PropName, ClassMethod>,
 }
 
@@ -50,7 +50,6 @@ impl<'m, C> visit::Visit for ClassDeclVisitor<'m, C>
                 // Trim the unnecessary stuff
                 class_method.function.body = None;
                 class_method.function.decorators.clear();
-
                 (
                     class_method.key.clone(),
                     ClassMethod {
@@ -61,8 +60,12 @@ impl<'m, C> visit::Visit for ClassDeclVisitor<'m, C>
             })
             .collect();
 
+        let mut class_decl = n.clone();
+        class_decl.class.decorators.clear();
+        class_decl.class.body.clear();
+
         self.0.push(ClassDecl {
-            class_ident: n.ident.clone(),
+            class_decl,
             class_methods,
         });
     }

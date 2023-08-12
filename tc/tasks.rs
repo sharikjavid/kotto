@@ -68,6 +68,19 @@ where
         }
 
         for class_decl in &filtered_module.class_decls {
+            let id = format!("class_decl.{}", class_decl.class_decl.ident);
+            prompt_writer.set_id(id)?;
+            prompt_writer.set_type(PromptType::TypeScript);
+
+            let mut buf = Vec::new();
+            let mut emitter = emit::Emitter::new(&mut buf)
+                .with_comments(&comments);
+            class_decl.class_decl.emit_with(&mut emitter)?;
+            let source_text = String::from_utf8(buf)?;
+            prompt_writer.set_fmt(source_text)?;
+
+            prompt_writer.push()?;
+
             for (prop_name, class_method) in &class_decl.class_methods {
                 let prop_ident = if let Some(prop_ident) = prop_name.clone().ident() {
                     prop_ident
@@ -75,7 +88,7 @@ where
                     continue
                 };
 
-                let id = format!("class_decl.{}.{}", class_decl.class_ident, prop_ident);
+                let id = format!("method_decl.{}.{}", class_decl.class_decl.ident, prop_ident);
                 prompt_writer.set_id(id)?;
                 prompt_writer.set_type(PromptType::TypeScript);
 

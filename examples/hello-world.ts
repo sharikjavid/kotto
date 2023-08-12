@@ -1,46 +1,39 @@
 import ai from "trackway/mod.ts"
 
-type Language = "english" | "french" | "german"
+type Sentiment = "bad" | "neutral" | "good"
 
-type Output = {
-    language: Language
-}
-
-/**
- * A class which, when awaited, returns the spoken language
- * in which the input string is written.
- */
 @ai.prompts(import.meta.url)
 class WhatLanguageIsThis extends ai.Agent {
-    output?: Output
-
     /**
-     * Retrieve the input string.
+     * Retrieve an input string from the user.
      */
     @ai.use
     getInput(): string {
-        const ans = prompt("What do you want to say? ")
+        const ans = prompt("What do you want to say?")
         if (ans === null) throw new Error("You need to say something!")
         else return ans
     }
 
     /**
-     * Fulfil the task, resolving it to the given output.
-     * @param output The output to which the task resolves.
+     * If the input is invalid or does not make sense, flag it.
+     * @param {string} reason Why it was flagged.
      */
     @ai.use
-    setOutput(output: Output) {
-        this.output = output
-        this.done()
+    recordInvalidInput(reason: string) {
+        throw new ai.Interrupt(reason)
     }
 
     /**
-     * Reject the task.
-     * @param reason Why the task was rejected.
+     * Record a sentiment and a one-word summary, associated to the input.
+     * @param {Sentiment} sentiment The sentiment to associate to the input.
+     * @param summary A one-word summary of the input.
      */
     @ai.use
-    reject(reason: string) {
-        throw new Error(reason)
+    setSentiment(sentiment: Sentiment, summary: string) {
+        this.resolve({
+            sentiment,
+            summary
+        })
     }
 }
 

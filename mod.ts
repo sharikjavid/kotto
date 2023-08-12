@@ -1,16 +1,33 @@
 import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
 
-import { parse as parsePath, join as joinPath } from "https://deno.land/std@0.198.0/path/mod.ts"
+import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
-export type LLMFunctionCall = {
-    function_name: string,
-    function_parameters: any[]
+export class Interrupt extends Error {
+    reason?: string
+
+    constructor(reason?: string) {
+        this.reason = reason
+    }
+}
+
+export type FunctionCall = {
+    name: string,
+    reasoning?: string,
+    arguments: any[]
+}
+
+function blockQuote(s: string, type?: string): string {
+    return `\`\`\`${type || "TypeScript"}\n${s}\n\`\`\``
 }
 
 class LLM {
     #openai: OpenAIApi
     #messages: ChatCompletionRequestMessage[] = []
     #base: CreateChatCompletionRequest
+
+    get messages(): ChatCompletionRequestMessage[] {
+        return this.#messages
+    }
 
     constructor() {
         const configuration = new Configuration({
@@ -21,30 +38,7 @@ class LLM {
 
         this.#base = {
             "model": "gpt-3.5-turbo",
-            "messages": [],
-            "functions": [{
-                "name": "eval",
-                "description": "call one of the functions (make sure the function parameters adhere to the type signature of the function)",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "function_name": {
-                            "type": "string",
-                            "description": "the name of the function to call (it must be one of the functions in the list)"
-                        },
-                        "function_parameters": {
-                            "type": "array",
-                            "description": "the parameters to call the function with, encoded as an array of JSON values (the parameters must adhere to the type signature of the function)",
-                            "items": {
-                                "type": ["number","string","boolean","object","array", "null"]
-                            }
-                        }
-                    },
-                },
-            }],
-            "function_call": {
-                "name": "eval"
-            }
+            "messages": []
         }
     }
 
@@ -64,12 +58,9 @@ class LLM {
         }
     }
 
-    async next(messages: ChatCompletionRequestMessage[]): Promise<LLMFunctionCall> {
+    async call(messages: ChatCompletionRequestMessage[]): Promise<FunctionCall> {
         const resp = await this.send(messages)
-
-        if (resp.function_call?.arguments === undefined) throw new Error("TODO")
-
-        return JSON.parse(resp.function_call.arguments)
+        return JSON.parse(resp.content)
     }
 }
 
@@ -104,28 +95,29 @@ const description_decorator = (description: string) => {
 
 const prompts_decorator = (prompts: string) => {
     return <T extends { new (...args: any[]): {} } >(constructor: T) => {
-        return class extends constructor {
-            prompts: string = prompts
-        }
+        constructor.prototype.prompts = prompts
     }
 }
 
 const use_decorator: () => MethodDecorator = () => {
     return (target: any, property_key: string, descriptor?: PropertyDescriptor) => {
-        target.exports.insert(property_key, {
+        if (target.exports === undefined) {
+            target.exports = new Map()
+        }
+        target.exports.set(property_key, {
             property_key
         })
     }
 }
 
 export class Agent {
+    resolved?: any = undefined
     is_done: boolean = false
-    exports: Map<keyof Agent, ExportDescriptor>
-    prompts: string
     description?: string
 
-    end() {
+    resolve(value: any) {
         this.is_done = true
+        this.resolved = value
     }
 
     then(onResolve, onReject) {
@@ -142,7 +134,7 @@ type PromptDescriptor = {
 
 export class Prompts {
     #source_path: string
-    #prompts: PromptDescriptor[]
+    #prompts
 
     constructor(path: string) {
         let source_path = parsePath(path)
@@ -150,10 +142,45 @@ export class Prompts {
     }
 
     async load() {
-        this.#prompts = (await import(this.#source_path)).ast
+        this.#prompts = await import(this.#source_path)
     }
 
+    regexFor(kind: string, name: string | string[]) {
+        let regex = `^${kind}`
 
+        let names
+        if (typeof name === "string") {
+            names = [name]
+        } else {
+            names = name
+        }
+
+        regex = regex.concat(...names.map((n) => `\\.${n}#\\d+`), "$")
+
+        return new RegExp(regex)
+    }
+
+    iterFor(kind: string, name: string) {
+        const regex = this.regexFor(kind, name)
+        return this.#prompts.ast.filter((node) => regex.test(node.id))
+    }
+
+    getTypeAliasDecls(): string[] {
+        return this.iterFor("type_alias_decl", "\\w+").map((m) => m.fmt)
+    }
+
+    getClassDecl(of: string): string | undefined {
+        return this.iterFor("class_decl", of).pop()?.fmt
+    }
+
+    getMethodDecls(of_class: string): string[] {
+        return this.iterFor("method_decl", [of_class, "\\w+"]).map((m) => m.fmt)
+    }
+}
+
+type LLMAction = {
+    call: FunctionCall,
+    output?: any
 }
 
 export class AgentController {
@@ -161,6 +188,7 @@ export class AgentController {
     llm: LLM
     prompts: Prompts
     do_init: Promise<void>
+    history: LLMAction[] = []
 
     constructor(agent: Agent) {
         this.agent = agent
@@ -173,35 +201,100 @@ export class AgentController {
         await this.prompts.load()
     }
 
-    async doNext(): Promise<boolean> {
+    initialPrompt(): string {
+        const exports = this.agent.exports
+        const class_name = this.agent.constructor.name
+        const method_decls = this.prompts.getMethodDecls(class_name).join("\n\n")
+        const type_alias_decls = this.prompts.getTypeAliasDecls().join("\n\n")
+        const all_code = [type_alias_decls, method_decls].join("\n\n")
+
+        return `
+You are the runtime of a JavaScript program, you decide which functions to call.
+
+Here is the abbreviated code of the program:
+
+${blockQuote(all_code)}
+
+I am going to feed this discussion to an API. So do not be verbose, just tell me which function you want 
+to call, with what argument, and I will tell you what the returned value is. Each of your prompts must 
+be of the following JSON form:
+
+\`\`\`json
+{
+   "name": "the name of the function you want to call",
+   "reasoning": "the reasoning that you've used to arrive to the conclusion you should use this function",
+   "arguments": [
+        // ... the arguments of the function you want to call
+   ] 
+}
+\`\`\`
+
+You must make sure that the function you are calling accepts the arguments you give it. This includes
+checking the arguments have the correct type for that function (refer to the types defined above, and the 
+built-in type definitions that are part of JavaScript/TypeScript's specification).
+
+Let's begin!
+`
+    }
+
+    async doAction(action: LLMAction) {
+        const output = await (this.agent[action.call.name])(...action.call.arguments)
+        action.output = output
+        this.history.push(action)
+    }
+
+    async doNext(prompt?: string): Promise<any> {
         await this.do_init
 
         if (this.agent.is_done) {
             throw new Error("agent is done")
         }
 
-        // TODO
+        if (prompt === undefined) {
+            if (this.llm.messages.length == 0) {
+                prompt = this.initialPrompt()
+            } else {
+                const last = this.history[this.history.length - 1]
+                prompt = blockQuote(JSON.stringify(last.output), "json")
+            }
+        }
 
-        return this.agent.is_done
+        const response = await this.llm.call([{
+            "role": "user",
+            "content": prompt
+        }])
+
+        console.error(colors.gray(`llm: ${response.reasoning}`))
+
+        await this.doAction({ call: response })
+
+        return this.agent.resolved
     }
 
-    async runToCompletion() {
-        let is_done
+    async runToCompletion(): any {
+        let resolved
         do {
-            is_done = await doNext()
-        } while (!is_done)
+            try {
+                resolved = await this.doNext()
+            } catch (e) {
+                if (!(e instanceof Interrupt)) {
+                    console.log(colors.red(`llm: exception thrown: ${e}, retrying`))
+                    resolved = await this.doNext(`Your last answer gave me an error: ${e}. Please try again!`)
+                }
+            }
+        } while (!this.agent.is_done)
+        return resolved
     }
 
     then(onResolve, onReject) {
-        onResolve()
+        return this.runToCompletion().then(onResolve, onReject)
     }
 }
 
-export const ai = {
+export default {
     Agent,
-    use: use_decorator,
+    use: use_decorator(),
     task: description_decorator,
-    prompts: prompts_decorator
+    prompts: prompts_decorator,
+    Interrupt
 }
-
-export default ai
