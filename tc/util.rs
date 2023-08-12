@@ -1,4 +1,4 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use crate::AnyError;
 
@@ -12,10 +12,6 @@ pub fn setup_tracing() -> Result<(), AnyError> {
     tracing_log::LogTracer::init().map_err(Into::into)
 }
 
-pub fn add_extension_to_path<P: AsRef<Path>, S: AsRef<OsStr>>(path: P, ext: S) -> Option<PathBuf> {
-    path.as_ref().file_name().map(|file_name| {
-        let mut file_name = OsString::from(file_name);
-        file_name.push(ext);
-        path.as_ref().with_file_name(file_name)
-    })
+pub fn add_extension_to_path<P: AsRef<Path>, S: AsRef<OsStr>>(path: P, ext: S) -> PathBuf {
+    path.as_ref().with_extension(ext)
 }

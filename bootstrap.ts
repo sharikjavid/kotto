@@ -40,7 +40,6 @@ async function doUname(): Promise<Platform> {
     if ((await child.status).success) {
         const output_b = await streams.readAll(streams.readerFromStreamReader(child.stdout.getReader()))
         const output = new TextDecoder().decode(output_b)
-
         const [os, machine] = output.toLowerCase().split(" ")
         return {
             machine,
@@ -57,7 +56,7 @@ async function resolveLatestRelease(): Promise<URL> {
 }
 
 async function doBootstrap() {
-    const ans = prompt(`${getLogPrefix(colors.yellow)} could not find tc, do you want to install it? [Y/n]`)
+    const ans = prompt(`${getLogPrefix(colors.yellow)} could not find tc, do you want to install it now? [Y/n]`)
     if (!(ans === "y" || ans === "Y" || ans === null)) {
         return
     }
@@ -98,6 +97,8 @@ async function doBootstrap() {
         log(`could not download tc: ${resp.statusText}`, colors.red)
         return
     }
+
+    log(`downloading ${github_bin_url}`)
 
     const f = await Deno.open(bin_target_path, {
         write: true,

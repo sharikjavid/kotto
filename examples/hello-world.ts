@@ -10,21 +10,18 @@ type Output = {
  * A class which, when awaited, returns the spoken language
  * in which the input string is written.
  */
+@ai.prompts(import.meta.url)
 class WhatLanguageIsThis extends ai.Agent {
-    input: string
     output?: Output
-
-    constructor(input: string) {
-        super()
-        this.input = input
-    }
 
     /**
      * Retrieve the input string.
      */
     @ai.use
     getInput(): string {
-        return this.input
+        const ans = prompt("What do you want to say? ")
+        if (ans === null) throw new Error("You need to say something!")
+        else return ans
     }
 
     /**
@@ -47,4 +44,4 @@ class WhatLanguageIsThis extends ai.Agent {
     }
 }
 
-console.log(await WhatLanguageIsThis("Bonjour!"))
+console.log(await new WhatLanguageIsThis())

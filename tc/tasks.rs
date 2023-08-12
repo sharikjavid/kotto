@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::io::Write;
 
 use crate::AnyError;
 use crate::{ast, filter, codegen, emit, util};
@@ -8,7 +9,7 @@ use codegen::Node;
 
 use tracing::{event, Level};
 
-const PROMPTS_EXT: &'static str = ".prompts";
+const PROMPTS_EXT: &'static str = "prompts.js";
 
 pub async fn parse_module<P>(module_path: P) -> Result<deno_ast::ParsedSource, AnyError>
 where
@@ -98,9 +99,10 @@ where
 
         let prompts = Prompts(prompts);
 
-        let prompts_path = util::add_extension_to_path(path, PROMPTS_EXT).unwrap();
+        let prompts_path = util::add_extension_to_path(path, PROMPTS_EXT);
         event!(Level::INFO, "writing {}", prompts_path.display());
-        let prompts_file = std::fs::File::create(prompts_path)?;
+        let mut prompts_file = std::fs::File::create(prompts_path)?;
+        write!(&mut prompts_file, "export const ast = ")?;
         serde_json::to_writer_pretty(prompts_file, &prompts)?;
     }
 
