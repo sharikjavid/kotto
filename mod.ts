@@ -1,7 +1,9 @@
 import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
 
-import { parse as parsePath, join as joinPath } from "https://deno.land/std@0.198.0/path/mod.ts"
+import { parse as parsePath, join as joinPath, ParsedPath, fromFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
+
+import { doRun } from "./bootstrap.ts"
 
 export class Interrupt extends Error {
     constructor(...args) {
@@ -135,12 +137,24 @@ export class Prompts {
     #prompts
 
     constructor(path: string) {
-        let source_path = parsePath(path)
-        this.#source_path = joinPath(source_path.dir, `${source_path.name}.prompts.js`)
+        this.#source_path = path
     }
 
     async load() {
-        this.#prompts = await import(this.#source_path)
+        const source_path = this.#source_path
+        const parsed_path = parsePath(source_path)
+        const source_path_file = fromFileUrl(source_path)
+
+        const proc = await doRun({
+            args: [source_path_file]
+        })
+
+        if (!(await proc.status).success) {
+            throw new Error("tc exited unsuccessfully")
+        }
+
+        const output_path = joinPath(parsed_path.dir, `${parsed_path.name}.prompts.js`)
+        this.#prompts = await import(output_path)
     }
 
     regexFor(kind: string, name: string | string[]) {
@@ -245,8 +259,6 @@ Let's begin!
     }
 
     async doNext(prompt?: string, role?: string): Promise<any> {
-        await this.do_init
-
         if (this.agent.is_done) {
             throw new Error("agent is done")
         }
@@ -279,6 +291,8 @@ Let's begin!
     }
 
     async runToCompletion(): any {
+        await this.do_init
+
         let resolved
         do {
             try {

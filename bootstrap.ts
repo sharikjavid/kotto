@@ -1,9 +1,8 @@
-import * as colors from "std/fmt/colors.ts"
-import * as path from "std/path/mod.ts"
-import * as fs from "std/fs/mod.ts"
-import * as streams from "std/streams/mod.ts"
-
-import { grantOrThrow } from "std/permissions/mod.ts"
+import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
+import * as path from "https://deno.land/std@0.198.0/path/mod.ts"
+import * as fs from "https://deno.land/std@0.198.0/fs/mod.ts"
+import * as streams from "https://deno.land/std@0.198.0/streams/mod.ts"
+import { grantOrThrow } from "https://deno.land/std@0.198.0/permissions/mod.ts"
 
 type RunParameters = {
     exec?: string
@@ -117,7 +116,7 @@ async function doBootstrap() {
     }
 }
 
-async function doRun(params?: RunParameters): Promise<Deno.ChildProcess> {
+export async function doRun(params?: RunParameters): Promise<Deno.ChildProcess> {
     const cmd = new Deno.Command(params?.exec || "tc", {
         args: params?.args,
         stdout: params?.stdout
