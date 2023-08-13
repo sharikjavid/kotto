@@ -1,0 +1,31 @@
+<svg fill="none" viewBox="0 0 400 400" width="400" height="400" xmlns="http://www.w3.org/2000/svg">
+    <foreignObject width="100%" height="100%">
+        <div xmlns="http://www.w3.org/1999/xhtml">
+            <style>
+                div {
+                  display: flex;
+                }
+
+                h1 {
+                  font-family: 'Hind', sans-serif;
+                  font-size: 4em; /* Equivalent to h1 size; can adjust if needed */
+                  background: linear-gradient(to right, #0575E6, #00F260);
+                  -webkit-background-clip: text;
+                  color: transparent;
+                  margin: 0;
+                  text-shadow:
+                    -1px 1px 0px rgba(0, 0, 0, 0.3),
+                    0 12px 0px rgba(0, 0, 0, 0.0);
+                  }
+
+                h2 {
+                  font-weight: bold;
+                  margin: 0;
+                }
+            </style>
+            <h1>
+                trackway
+            </h1>
+        </div>
+    </foreignObject>
+</svg>
