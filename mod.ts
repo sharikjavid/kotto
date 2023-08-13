@@ -1,13 +1,30 @@
 import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
 
-import { parse as parsePath, join as joinPath, ParsedPath, fromFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
+import { parse as parsePath, join as joinPath, fromFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
-import { doRun } from "./bootstrap.ts"
+import { doRun, getLogLevel, setLogLevel, warn, debug } from "./bootstrap.ts"
+
+export function thought(content?: string) {
+    switch (getLogLevel()) {
+        case "introspective":
+        case "debug":
+            console.log(colors.gray(`llm: ${content || "(no reasoning given)"}`))
+            break;
+    }
+}
+
+export class RuntimeError extends Error {
+    constructor(message) {
+        super(message)
+        this.name = "RuntimeError"
+    }
+}
 
 export class Interrupt extends Error {
-    constructor(...args) {
-        super(...args)
+    constructor(message) {
+        super(message)
+        this.name = "Interrupt"
     }
 }
 
@@ -44,7 +61,7 @@ class LLM {
     }
 
     async send(messages: ChatCompletionRequestMessage[]): Promise<ChatCompletionRequestMessage> {
-        let req: CreateChatCompletionRequest = {
+        const req: CreateChatCompletionRequest = {
             ...this.#base,
             "messages": this.#messages.concat(messages)
         }
@@ -61,7 +78,7 @@ class LLM {
 
     async call(messages: ChatCompletionRequestMessage[]): Promise<FunctionCall> {
         const resp = await this.send(messages)
-        console.log(colors.blue(`response: ${resp.content}`))
+        debug({ text: `API response ${resp.content}`, color: colors.blue, prefix: "openai" })
         return JSON.parse(resp.content)
     }
 }
@@ -149,8 +166,8 @@ export class Prompts {
             args: [source_path_file]
         })
 
-        if (!(await proc.status).success) {
-            throw new Error("tc exited unsuccessfully")
+        if (!(await proc?.status)?.success) {
+            throw new RuntimeError("tc exited unsuccessfully")
         }
 
         const output_path = joinPath(parsed_path.dir, `${parsed_path.name}.prompts.js`)
@@ -233,8 +250,7 @@ export class AgentController {
         const type_alias_decls = this.prompts.getTypeAliasDecls().join("\n\n")
         const all_code = [type_alias_decls, method_decls].join("\n\n")
 
-        return `
-You are the runtime of a JavaScript program, you decide which functions to call.
+        return `You are the runtime of a JavaScript program, you decide which functions to call.
 
 Here is the abbreviated code of the program:
 
@@ -278,14 +294,14 @@ Let's begin!
             role = "system"
         }
 
-        console.log(colors.yellow(`prompt: ${prompt}`))
+        debug({ text: prompt, color: colors.yellow, prefix: "prompt" })
 
         const response = await this.llm.call([{
             "role": role,
             "content": prompt
         }])
 
-        console.error(colors.gray(`llm: ${response.reasoning}`))
+        thought(response.reasoning)
 
         await this.doAction({ call: response })
 
@@ -301,7 +317,8 @@ Let's begin!
                 resolved = await this.doNext()
             } catch (e) {
                 if (!(e instanceof Interrupt)) {
-                    console.log(colors.red(`llm: exception thrown: ${e}, retrying`))
+                    warn(`caught an exception: ${e}`)
+                    warn("asking the llm to fix it")
                     resolved = await this.doNext(`
 error: ${e}. 
 
@@ -327,5 +344,7 @@ export default {
     use: use_decorator(),
     task: description_decorator,
     prompts: prompts_decorator,
-    Interrupt
+    Interrupt,
+    setLogLevel,
+    getLogLevel
 }

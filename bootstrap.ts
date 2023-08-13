@@ -1,27 +1,69 @@
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 import * as path from "https://deno.land/std@0.198.0/path/mod.ts"
 import * as fs from "https://deno.land/std@0.198.0/fs/mod.ts"
-import * as streams from "https://deno.land/std@0.198.0/streams/mod.ts"
 import { grantOrThrow } from "https://deno.land/std@0.198.0/permissions/mod.ts"
 
-type RunParameters = {
-    exec?: string
-    args?: string[],
-    stdout?: "piped" | "inherit" | "null",
-    should_prompt?: boolean
+export type LogLevel = "silent" | "quiet" | "introspective" | "debug"
+
+let LOG_LEVEL: LogLevel = "introspective"
+
+export function setLogLevel(level: LogLevel) {
+    LOG_LEVEL = level
 }
 
-function getLogPrefix(color?: (_: string) => string): string {
+export function getLogLevel(): LogLevel {
+    return LOG_LEVEL
+}
+
+export type LogEntry = {
+    prefix?: string,
+    color?: (_: string) => string,
+    text: string,
+    target?: "stdout" | "stderr"
+}
+
+export function getLogPrefix(prefix?: string, color?: (_: string) => string): string {
+    prefix = prefix || "trackway"
     color = color || colors.cyan
-    return color(colors.bold("trackway:"))
+    return color(`${prefix}:`)
 }
 
-function log(msg: string, color?: (_: string) => string) {
-    console.log(`${getLogPrefix(color)} ${msg}`)
+export function renderLog({ prefix, color, text }: LogEntry): string {
+    return `${getLogPrefix(prefix, color)} ${text}`
 }
 
-function logLine() {
-    console.error()
+export function log({prefix, color, text, target}: LogEntry) {
+    if (LOG_LEVEL == "silent") return
+    const content = renderLog({ prefix, color, text })
+    if (target || "stderr" == "stderr")
+        console.error(content)
+    else
+        console.log(content)
+}
+
+export function info(text: string) {
+    return log({ text })
+}
+
+export function error(text: string) {
+    return log({ text, color: (s: string) => colors.red(colors.bold(s)) })
+}
+
+export function warn(text: string) {
+    return log({ text, color: colors.yellow })
+}
+
+export function debug(entry: LogEntry) {
+    if (getLogLevel() == "debug") log(entry)
+}
+
+export function ask(question: string): "yes" | "no" {
+    const ans = prompt(renderLog({ text: `${question} [Y/n]`, color: colors.yellow }))
+    if (!(ans === "y" || ans === "Y" || ans === null)) {
+        return "no"
+    } else {
+        return "yes"
+    }
 }
 
 type Platform = {
@@ -30,15 +72,14 @@ type Platform = {
 }
 
 async function doUname(): Promise<Platform> {
-    const child = await doRun({
+    const child = doRun({
         exec: "uname",
         args: ["-sm"],
         stdout: "piped"
     })
 
     if ((await child.status).success) {
-        const output_b = await streams.readAll(streams.readerFromStreamReader(child.stdout.getReader()))
-        const output = new TextDecoder().decode(output_b)
+        const output = new TextDecoder().decode((await child.output()).stdout)
         const [os, machine] = output.toLowerCase().split(" ")
         return {
             machine,
@@ -55,17 +96,14 @@ async function resolveLatestRelease(): Promise<URL> {
 }
 
 async function doBootstrap() {
-    const ans = prompt(`${getLogPrefix(colors.yellow)} could not find tc, do you want to install it now? [Y/n]`)
-    if (!(ans === "y" || ans === "Y" || ans === null)) {
+    if (ask("could not find tc, do you want to install it now?") != "yes")
         return
-    }
     
-    log("this will download it from github and put it under ${HOME}/.local/bin/tc")
-    
-    log("this operation requires the following permissions:")
-    log("  * read/write filesystem access")
-    log("  * net access")
-    log("  * env access (for locating your ${HOME})")
+    info("this will download it from github and put it under ${HOME}/.local/bin/tc")
+    info("this operation requires the following permissions:")
+    info("  * read/write filesystem access")
+    info("  * net access")
+    info("  * env access (for locating your ${HOME})")
 
     await grantOrThrow({
         name: "net"
@@ -93,11 +131,11 @@ async function doBootstrap() {
     }))
 
     if (resp.status != 200) {
-        log(`could not download tc: ${resp.statusText}`, colors.red)
+        error(`could not download tc: ${resp.statusText}`)
         return
     }
 
-    log(`downloading ${github_bin_url}`)
+    info(`downloading ${github_bin_url}`)
 
     const f = await Deno.open(bin_target_path, {
         write: true,
@@ -109,19 +147,31 @@ async function doBootstrap() {
     await Deno.chmod(bin_target_path, 0o755)
 
     if(await isAvailable()) {
-        log("all done 🎉")
+        info("all done 🎉")
     } else {
-        log("we couldn't make sure tc is available, try running this in your terminal and try again:", colors.red)
-        log(`    export PATH=${bin_target_dir}:\${PATH}`, colors.red)
+        error("couldn't make sure tc is available, try running this in your terminal and try again:")
+        error(`    export PATH=${bin_target_dir}:\${PATH}`)
     }
 }
 
-export async function doRun(params?: RunParameters): Promise<Deno.ChildProcess> {
-    const cmd = new Deno.Command(params?.exec || "tc", {
-        args: params?.args,
-        stdout: params?.stdout
-    })
-    return await cmd.spawn()
+type RunParameters = {
+    exec?: string
+    args?: string[],
+    stdout?: "piped" | "inherit" | "null",
+    should_prompt?: boolean
+}
+
+export function doRun(params?: RunParameters): Deno.ChildProcess | undefined {
+    try {
+        const cmd = new Deno.Command(params?.exec || "tc", {
+            args: params?.args,
+            stdout: params?.stdout
+        })
+        return cmd.spawn()
+    } catch (e) {
+        if (e instanceof Deno.errors.NotFound) return undefined
+        else throw e
+    }
 }
 
 async function ensurePermissionsToRun(params?: RunParameters) {
@@ -133,7 +183,7 @@ async function ensurePermissionsToRun(params?: RunParameters) {
 
     const permission_status = await Deno.permissions.query(run_permission)
     if (permission_status.state != "granted" && should_prompt) {
-        log("we need to run tc (a native binary) in order to compile prompts, is that ok?")
+        info("we need to run tc (a native binary) in order to compile prompts, is that ok?")
         await Deno.permissions.request(run_permission)
     }
 }
@@ -142,14 +192,9 @@ async function havePermissionsToRun(params?: RunParameters): Promise<boolean> {
     return ensurePermissionsToRun(params).then(() => true).catch(() => false)
 }
 
-function isAvailable(params?: RunParameters): Promise<boolean> {
-    return doRun({ exec: params?.exec })
-        .then((child) => child.status)
-        .then((status) => status.success)
-        .catch((err) => {
-            if (err instanceof Deno.errors.NotFound) return false
-            else throw err
-        })
+async function isAvailable(params?: RunParameters): Promise<boolean> {
+    const child = doRun({ exec: params?.exec })
+    return child?.status?.then((status) => status.success) || false
 }
 
 if (await havePermissionsToRun() && !await isAvailable()) {
