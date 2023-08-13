@@ -341,6 +341,7 @@ ${this.outputTemplate()}
 
 export default {
     Agent,
+    AgentController,
     use: use_decorator(),
     task: description_decorator,
     prompts: prompts_decorator,
