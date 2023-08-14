@@ -33,4 +33,6 @@ clap = { version = "4.3.3", features = [ "derive", "env" ] }
 
 tokio = { version = "1.29.1", features = [ "full" ] }
 
+reqwest = "0.11.18"
+
 deno_ast = { workspace = true }

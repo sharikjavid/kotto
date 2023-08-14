@@ -1,5 +1,6 @@
 use clap::Parser;
 use anyhow::Error as AnyError;
+use anyhow::anyhow;
 
 use deno_ast::swc::ast;
 use deno_ast::swc::visit;
@@ -20,7 +21,7 @@ pub trait CanPush<T> {
 }
 
 async fn run_subcommand(flags: Flags) -> Result<i32, AnyError> {
-    tasks::compile_prompts(&flags.paths).await?;
+    tasks::compile_prompts_for_specifiers(&flags.paths, flags.output).await?;
     Ok(0)
 }
 
