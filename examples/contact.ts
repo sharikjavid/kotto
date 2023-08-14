@@ -1,4 +1,4 @@
-import ai from "trackway/mod.ts"
+import ai from "../mod.ts"
 
 import { green } from "https://deno.land/std@0.198.0/fmt/colors.ts"
 

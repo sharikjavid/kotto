@@ -1,4 +1,4 @@
-import ai from "trackway/mod.ts"
+import ai from "../mod.ts"
 
 @ai.prompts(import.meta.url)
 class HelloWorld extends ai.Agent {
