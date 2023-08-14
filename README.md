@@ -30,25 +30,36 @@ and have them run anywhere.
 <br/>
 
 - [Getting Started](#getting-started)
-  - [Run the examples](#run-the-examples)
-  - [Install Deno](#install-deno)
-  - [Get an OpenAI key](#get-an-openai-key)
+    - [Run the examples](#run-the-examples)
+    - [Install Deno](#install-deno)
+    - [Get an OpenAI key](#get-an-openai-key)
 - [Examples](#examples)
-  - [Hello, World!](./examples/hello-world.ts)
-  - [Extracting information](./examples/contact.ts)
-  - [Transforming types](./examples/poems.ts)
-  - [And more!](./examples)
+    - [Hello, World!](./examples/hello-world.ts)
+    - [Extracting information](./examples/contact.ts)
+    - [Transforming types](./examples/poems.ts)
+    - [And more!](./examples)
 - [Documentation](#documentation)
-  - [Imports](#imports)
-  - [Building agents](#building-agents)
-  - [@prompts](#prompts)
-  - [@use](#use)
-  - [Exceptions](#exceptions)
+    - [Imports](#imports)
+    - [Building agents](#building-agents)
+    - [@prompts](#prompts)
+    - [@use](#use)
+    - [Exceptions](#exceptions)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 
 ## Getting Started
+
+If you already have Deno and an OpenAI key, you can try out the [examples](./examples) interactively by running:
+
+```bash
+deno run https://damien.sh/trackway/examples/mod.ts
+```
+
+If you want to try just one specific example out, replace "mod.ts" by the example file (e.g. "hello-world.ts").
+
+See [Install Deno](#install-deno) and [Get an OpenAI key](#get-an-openai-key) if you need to set those up. Otherwise,
+head over to the [docs](#documentation) to learn how to build your own agents!
 
 #### Install Deno
 
@@ -78,22 +89,6 @@ export OPENAI_KEY="my-super-secret-key"
 
 Take a look at the [How safe is it?](#how-safe-is-it) section if you want to know what gets sent to OpenAI when you use
 Trackway.
-
-### Run the examples
-
-If you already have Deno and an OpenAI key, you can try out all the [examples](./examples) by running:
-
-```bash
-deno run https://damien.sh/trackway/examples/mod.ts
-```
-
-If you want to try just one specific example out, replace "mod.ts" by the example file (e.g. "hello-world.ts").
-
-See [Install Deno](#install-deno) and [Get an OpenAI key](#get-an-openai-key) if you need to set those up.
-
-### Get building!
-
-Head over to the [docs](#documentation) to learn how to build your own agents!
 
 ## Examples
 
@@ -130,7 +125,9 @@ class MyAgent extends ai.Agent {
 
 Note the [@prompts](#prompts) is required (see below).
 
-This makes instances of the `MyAgent` class [await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await)'able. Each await statement passes control over to the LLM
+This makes instances of the `MyAgent`
+class [await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await)'able. Each await
+statement passes control over to the LLM
 and
 awaits for completion of the task:
 
@@ -232,9 +229,11 @@ create a
 LLM-friendly runtime.
 
 This means the starting and end points are always code. In this project, prompt engineering is closer to a code
-generation task: something you can customise and adjust procedurally (like any meta-programming framework), but not something you'd do manually.
+generation task: something you can customise and adjust procedurally (like any meta-programming framework), but not
+something you'd do manually.
 
-If you need something that is low-level where prompts are crafted through raw string concatenation or interpolation, you might want to
+If you need something that is low-level where prompts are crafted through raw string concatenation or interpolation, you
+might want to
 look at [LangChain] or [LlamaIndex] instead. Trackway is a project closer to something like [marvin].
 
 ### How safe is it?
@@ -244,8 +243,10 @@ to guarantee agents are safe against adversarial user inputs.
 
 At the level of Trackway, there are a few implemented backstops that can help.
 
-One of them is that we *never* execute code coming directly from the LLM backend. We have a pure JSON-only interface with the LLM,
-asking it for data and returning it data. So the model is unable to have side effects that you didn't expose through the content of your own code. 
+One of them is that we *never* execute code coming directly from the LLM backend. We have a pure JSON-only interface
+with the LLM,
+asking it for data and returning it data. So the model is unable to have side effects that you didn't expose through the
+content of your own code.
 
 Another backstop is that *only* methods that are explicitly tagged with the [@use annotation](#use) are exposed to the
 LLM. Therefore only those methods are known to the model. Even the method's body is hidden from the model! So it only
@@ -255,7 +256,8 @@ those arguments, etc. Basically it knows what you would otherwise know reading t
 That being said, if security is a concern, you should always validate untrusted inputs and carefully consider the side
 effects your agent can produce.
 
-TL;DR: If you're dealing with untrusted user input, apply the same caution as you would when implementing any public-facing API.
+TL;DR: If you're dealing with untrusted user input, apply the same caution as you would when implementing any
+public-facing API.
 
 ## Roadmap
 
@@ -266,10 +268,12 @@ TODO
 Trackway is 100% a community effort to make LLM chains easy to build and use. And I'm so grateful you're willing to
 help!
 
-If you have found a bug or have a suggestion for a feature you'd like, open an [issue](https://github.com/brokad/trackway/issues/new). PRs are of course always
+If you have found a bug or have a suggestion for a feature you'd like, open
+an [issue](https://github.com/brokad/trackway/issues/new). PRs are of course always
 welcome!
 
-If you have a question to ask or feedback to give, be it good or bad, please start a [discussion](https://github.com/brokad/trackway/discussions/new?category=ideas).
+If you have a question to ask or feedback to give, be it good or bad, please start
+a [discussion](https://github.com/brokad/trackway/discussions/new?category=ideas).
 
 If you feel like helping with the implementation, get in touch!
 
