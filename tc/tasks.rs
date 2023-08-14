@@ -2,7 +2,7 @@ use std::path::Path;
 use std::io::Write;
 
 use crate::{AnyError, anyhow, CanPush};
-use crate::{ast, filter, codegen, emit, util};
+use crate::{ast, filter, codegen, emit};
 use crate::prompts::{Prompt, Prompts, PromptsWriter, PromptType};
 
 use codegen::Node;
@@ -121,7 +121,7 @@ where
                 return Err(anyhow!("could not retrieve {specifier}: {}", resp.status()))
             }
         } else {
-            tokio::fs::read_to_string(specifier.path()).await?
+            tokio::fs::read_to_string(specifier.to_file_path().unwrap()).await?
         };
 
         let parsed_module = parse_module(specifier.to_string(), module_source).await?;
@@ -136,7 +136,7 @@ where
         let prompts = Prompts(prompts);
 
         let mut writer: Box<dyn Write> = if let Some(base) = output.as_ref() {
-            let prompts_path = util::add_extension_to_path(specifier.path(), PROMPTS_EXT);
+            let prompts_path = Path::new(specifier.path()).with_extension(PROMPTS_EXT);
             let output_path = base.as_ref().join(prompts_path.file_name().unwrap());
             Box::new(std::fs::File::create(output_path)?)
         } else {

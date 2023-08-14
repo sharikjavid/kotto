@@ -1,6 +1,7 @@
 import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
 
-import { parse as parsePath, join as joinPath, fromFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
+import { parse as parsePath, join as joinPath, fromFileUrl, toFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
+import { ensureDir } from "https://deno.land/std@0.198.0/fs/mod.ts"
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
 import { doRun, getLogLevel, setLogLevel, warn, debug } from "./bootstrap.ts"
@@ -150,27 +151,51 @@ type PromptDescriptor = {
 }
 
 export class Prompts {
-    #source_path: string
+    #source_url: URL
     #prompts
 
-    constructor(path: string) {
-        this.#source_path = path
+    constructor(url: string) {
+        this.#source_url = new URL(url)
     }
 
     async load() {
-        const source_path = this.#source_path
-        const parsed_path = parsePath(source_path)
-        const source_path_file = fromFileUrl(source_path)
+        const source_url = this.#source_url
+
+        // TODO: don't use path stuff for URLs
+        const parsed_path = parsePath(source_url.pathname)
+
+        if (source_url.protocol !== "file:") {
+            // if remote module, try to get `.prompts.js` for an early win
+            const prompts_path = new URL(source_url)
+            prompts_path.pathname = `${parsed_path.dir}/${parsed_path.name}.prompts.js`
+            try {
+                this.#prompts = await import(prompts_path)
+                return
+            }
+            catch (e) {
+                if (e instanceof TypeError && e.code === "ERR_MODULE_NOT_FOUND") {
+                    // absorb silently, we'll build below
+                } else {
+                    throw e
+                }
+            }
+        }
+
+        const local_build_path = joinPath(Deno.cwd(), ".trackway", "builds")
+
+        await ensureDir(local_build_path)
 
         const proc = await doRun({
-            args: [source_path_file]
+            urls: [source_url],
+            output_path: local_build_path
         })
 
         if (!(await proc?.status)?.success) {
             throw new RuntimeError("tc exited unsuccessfully")
         }
 
-        const output_path = joinPath(parsed_path.dir, `${parsed_path.name}.prompts.js`)
+        const output_path = toFileUrl(joinPath(local_build_path, `${parsed_path.name}.prompts.js`))
+
         this.#prompts = await import(output_path)
     }
 
