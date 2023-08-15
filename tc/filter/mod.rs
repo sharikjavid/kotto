@@ -11,16 +11,19 @@ use visit::Visit;
 mod type_alias_decl;
 mod class_decl;
 mod type_ref;
-mod function;
+mod fn_decl;
 
 pub use type_alias_decl::{TypeAliasDecl, TypeAliasVisitor};
 pub use class_decl::{ClassDecl, ClassDeclVisitor};
 pub use type_ref::{TypeRef, TypeRefVisitor};
+pub use fn_decl::FnDecl;
+use crate::filter::fn_decl::FnDeclVisitor;
 
 #[derive(Debug, Default)]
 pub struct FilteredModule {
     pub type_alias_decls: HashMap<ast::Id, TypeAliasDecl>,
-    pub class_decls: Vec<ClassDecl>
+    pub class_decls: Vec<ClassDecl>,
+    pub fn_decls: Vec<FnDecl>
 }
 
 impl FilteredModule {
@@ -58,14 +61,16 @@ impl<T: Hash + Eq> CanPush<T> for HashSet<T> {
 #[derive(Debug)]
 pub struct FilterParams {
     enable_type_alias_decls: bool,
-    enable_class_decls: bool
+    enable_class_decls: bool,
+    enable_fn_decls: bool
 }
 
 impl Default for FilterParams {
     fn default() -> Self {
         Self {
             enable_type_alias_decls: true,
-            enable_class_decls: true
+            enable_class_decls: true,
+            enable_fn_decls: true
         }
     }
 }
@@ -79,6 +84,10 @@ pub async fn run_filters(params: FilterParams, module: &ast::Module) -> Result<F
 
     if params.enable_class_decls {
         ClassDeclVisitor(&mut result.class_decls).visit_module(module);
+    }
+
+    if params.enable_fn_decls {
+        FnDeclVisitor(&mut result.fn_decls).visit_module(module);
     }
 
     Ok(result)

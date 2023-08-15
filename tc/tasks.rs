@@ -59,6 +59,21 @@ where
         prompt_writer.push()?;
     }
 
+    for fn_decl in &filtered_module.fn_decls {
+        let id = format!("fn_decl.{}", fn_decl.ident);
+        prompt_writer.set_id(id)?;
+        prompt_writer.set_type(PromptType::TypeScript);
+
+        let mut buf = Vec::new();
+        let mut emitter = emit::Emitter::new(&mut buf)
+            .with_comments(&comments);
+        fn_decl.emit_with(&mut emitter)?;
+        let source_text = String::from_utf8(buf)?;
+        prompt_writer.set_fmt(source_text)?;
+
+        prompt_writer.push()?;
+    }
+
     for class_decl in &filtered_module.class_decls {
         let id = format!("class_decl.{}", class_decl.class_decl.ident);
         prompt_writer.set_id(id)?;

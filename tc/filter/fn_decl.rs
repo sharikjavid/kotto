@@ -22,7 +22,10 @@ impl<'m, C> visit::Visit for FnDeclVisitor<'m, C>
         C: CanPush<FnDecl>
 {
     fn visit_fn_decl(&mut self, n: &ast::FnDecl) {
-        self.0.push(FnDecl(n.clone()));
+        let mut fn_decl = n.clone();
+        fn_decl.function.body = None;
+        fn_decl.function.decorators.clear();
+        self.0.push(FnDecl(fn_decl));
     }
 }
 

@@ -1,11 +1,14 @@
 import ai from "../mod.ts"
 
-@ai.prompts(import.meta.url)
-class BeEncouraging extends ai.Agent {
-    @ai.use
-    endImmediately(an_encouraging_statement: string) {
-        this.resolve(an_encouraging_statement)
-    }
+/**
+ * Prints an encouraging statement.
+ * 
+ * @param {string} message Should be encouraging.
+ */
+function print(message: string) {
+    console.log(message)
 }
 
-console.log(await new BeEncouraging())
+await ai.call(print)
+
+// prints: "Keep up the good work!"

@@ -69,6 +69,7 @@ class LLM {
 
 export type ExportDescriptor = {
     property_key: string,
+    adder: (scope: Scope) => void,
     description?: string
 }
 
@@ -82,11 +83,15 @@ export class ExportsMap {
     insert(property_key: string, descriptor: ExportDescriptor) {
         this.#inner.set(property_key, descriptor)
     }
+
+    forEach(fn: (_: ExportDescriptor) => void) {
+        this.#inner.forEach(fn)
+    }
 }
 
 type ConstructorDecorator = <T extends { new (...args: any[]): {} } >(constructor: T) => any
 
-type MethodDecorator = (target: object, property_key: string, descriptor: PropertyDescriptor) => void
+type MethodDecorator = (target: any, property_key: string, descriptor: PropertyDescriptor) => void
 
 const description_decorator = (task: string) => {
     return <T extends { new (...args: any[]): {} } >(constructor: T) => {
@@ -100,15 +105,14 @@ const prompts_decorator = (prompts: string) => {
     }
 }
 
-const use_decorator: () => MethodDecorator = () => {
-    return (target: any, property_key: string, descriptor?: PropertyDescriptor) => {
-        if (target.exports === undefined) {
-            target.exports = new Map()
-        }
-        target.exports.set(property_key, {
-            property_key
-        })
+const use_decorator: MethodDecorator = (target: any, property_key: string, _descriptor?: PropertyDescriptor) => {
+    if (target.exports === undefined) {
+        target.exports = new Map()
     }
+    target.exports.set(property_key, {
+        property_key,
+        adder: (scope: Scope) => scope.add("method_decl", Scope.ident(target.constructor.name), Scope.ident(property_key))
+    })
 }
 
 export class Agent {
@@ -137,10 +141,16 @@ type Action = {
     output?: object
 }
 
-interface AnnotatedAgent extends Agent {
+interface AnnotatedAgent {
     prompts?: string
+
     template?: Template
+
     exports: ExportsMap
+
+    is_done: boolean
+
+    resolved?: any
 }
 
 export class AgentController {
@@ -162,8 +172,7 @@ export class AgentController {
 
     renderContext(): string {
         const scope = this.prompts.newScope()
-        const class_name = this.agent.constructor.name
-        scope.add("method_decl", Scope.ident(class_name), Scope.child)
+        this.agent.exports.forEach(({ adder }) => adder(scope))
         return this.template.renderContext(scope)
     }
 
@@ -239,27 +248,39 @@ export class AgentController {
     }
 }
 
-async function fn(inner: (...args: any[]) => any) {
-    const prompts = new Prompts()
-    await prompts.ensureReady()
-
+async function call(inner: (...args: any[]) => any) {
     if (inner.name === undefined) {
-        throw new Error("TODO")
-    } else {
-        // TODO(brokad): what if this gets minified?
-        const decl = prompts.getDecl(`fn_decl.${inner.name}`)
-        
+        throw new Error("`call` can only be used with top-level named functions")
     }
+
+    // TODO: what if this gets minified?
+
+    class CallAgent extends Agent {
+        exports: ExportsMap = new ExportsMap()
+
+        async call(...args: any[]) {
+            this.resolve(await inner(...args))
+        }
+    }
+
+    const agent = new CallAgent()
+
+    agent.exports.insert(inner.name, {
+        property_key: "call",
+        adder: (scope: Scope) => scope.add("fn_decl", Scope.ident(inner.name))
+    })
+
+    return await agent
 }
 
 export default {
     Agent,
     AgentController,
-    use: use_decorator(),
+    use: use_decorator,
     task: description_decorator,
     prompts: prompts_decorator,
     Interrupt,
     setLogLevel,
     getLogLevel,
-    fn
+    call
 }
