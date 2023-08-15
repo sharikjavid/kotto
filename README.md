@@ -206,15 +206,19 @@ await ai.call(callback, "Hope is the thing with feathers that perches in the sou
 // prints: dickinson
 ```
 
-If you need more control and multiple action paths (e.g. for handling malformed inputs or errors), look at 
-[Building agents](#building-agents). For example, rerunning the example above with a famous quote from 
-[DJ Khaled](https://en.wikipedia.org/wiki/DJ_Khaled):
+You often need more control and multiple action paths (e.g. for handling malformed inputs or errors), in which case look at 
+[Building agents](#building-agents). 
+
+For example, rerunning the example above with a famous quote from [DJ Khaled](https://en.wikipedia.org/wiki/DJ_Khaled):
 
 ```typescript
+// ... inputting a quote from DJ Khaled ...
 await ai.call(callback, "Don't ever play yourself.")
+
+// prints: shakespeare
 ```
 
-will print "shakespeare". In those sorts of situations, it is often better to define an explicit agent with 
+will print "shakespeare"!In those sorts of situations, it is often better to define an explicit agent with 
 multiple methods as in [hello-world-interactive.ts](./examples/hello-world-interactive.ts)
 
 ### Exceptions
