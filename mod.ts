@@ -237,20 +237,31 @@ type Action = {
     output?: any
 }
 
+interface AnnotatedAgent extends Agent {
+    prompts?: string
+    exports: ExportsMap
+}
+
 export class AgentController {
-    agent: Agent
+    agent: AnnotatedAgent
     llm: LLM
     prompts: Prompts
     do_init: Promise<void>
     history: Action[] = []
 
-    constructor(agent: Agent) {
+    constructor(agent: AnnotatedAgent) {
         agent.is_done = false
         agent.resolved = undefined
         this.agent = agent
         this.llm = new LLM()
-        this.prompts = new Prompts(agent.prompts)
-        this.do_init = new Promise((onResolve, onReject) => this.doInit().then(onResolve, onReject))
+
+        let prompts = agent.prompts
+        if (prompts === undefined) {
+            prompts = Deno.mainModule
+        }
+
+        this.prompts = new Prompts(prompts)
+        this.do_init = new Promise(this.doInit().then)
     }
 
     async doInit() {
@@ -269,7 +280,6 @@ export class AgentController {
     }
 
     initialPrompt(): string {
-        const exports = this.agent.exports
         const class_name = this.agent.constructor.name
         const method_decls = this.prompts.getMethodDecls(class_name).join("\n\n")
         const type_alias_decls = this.prompts.getTypeAliasDecls().join("\n\n")
@@ -296,9 +306,18 @@ Let's begin!
     }
 
     async doAction(action: Action) {
-        const output = await (this.agent[action.call.name])(...action.call.arguments)
-        action.output = output
-        this.history.push(action)
+        const exports = this.agent.exports
+
+        const export_descriptor = exports.get(action.call.name)
+
+        if (export_descriptor !== undefined) {
+            const call_name = export_descriptor.property_key
+            const output = await (this.agent[call_name])(...action.call.arguments)
+            action.output = output
+            this.history.push(action)
+        } else {
+            throw new TypeError(`${action.call.name} is not a function`)
+        }
     }
 
     async doNext(prompt?: string, role?: string): Promise<any> {

@@ -104,7 +104,7 @@ You only need one import (no install required):
 import ai from "https://damien.sh/trackway/mod.ts"
 ```
 
-By default, this will always pull the latest release. If you need to peg a specific version, use a `@semver` tag:
+By default, this will always pull the latest release (recommended). If you need to peg a specific version, use a `@semver` tag:
 
 ```typescript
 import ai from "https://damien.sh/trackway@0.1.0/mod.ts"
