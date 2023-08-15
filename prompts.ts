@@ -107,15 +107,19 @@ export class Scope {
         return this.#prompts.ast.filter((node) => regex.test(node.id))
     }
 
-    add(...pat: string[]) {
+    addFromId(...pat: string[]) {
         this.iterFor(...pat).forEach((node) => {
             this.#current.set(node.id, node)
             node.context?.forEach((node_id) => {
                 if (!this.#current.has(node_id)) {
-                    this.add(...node_id.split("."))
+                    this.addFromId(...node_id.split("."))
                 }
             })
         })
+    }
+
+    addNode(node: PromptNode) {
+        this.#current.set(node.id, node)
     }
     
     current(): PromptNode[] {

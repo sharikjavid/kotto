@@ -111,7 +111,7 @@ const use_decorator: MethodDecorator = (target: any, property_key: string, _desc
     }
     target.exports.set(property_key, {
         property_key,
-        adder: (scope: Scope) => scope.add("method_decl", Scope.ident(target.constructor.name), Scope.ident(property_key))
+        adder: (scope: Scope) => scope.addFromId("method_decl", Scope.ident(target.constructor.name), Scope.ident(property_key))
     })
 }
 
@@ -229,7 +229,7 @@ export class AgentController {
         let resolved
         do {
             resolved = await this.doNext().catch((err) => {
-                if (!(err instanceof Interrupt)) {
+                if (!(err instanceof Interrupt) && !(err instanceof RuntimeError)) {
                     warn(`caught an exception: ${err}`)
                     warn("asking the llm to fix it")
                     const error_prompt = this.template.renderError(err)
@@ -248,7 +248,11 @@ export class AgentController {
     }
 }
 
-async function call(inner: (...args: any[]) => any) {
+export type CallParams = {
+    input?: string
+}
+
+async function call(inner: (...args: any[]) => any, params?: CallParams) {
     if (inner.name === undefined) {
         throw new Error("`call` can only be used with top-level named functions")
     }
@@ -257,6 +261,10 @@ async function call(inner: (...args: any[]) => any) {
 
     class CallAgent extends Agent {
         exports: ExportsMap = new ExportsMap()
+
+        async getContext(): string {
+            return params?.input!
+        }
 
         async call(...args: any[]) {
             this.resolve(await inner(...args))
@@ -267,8 +275,30 @@ async function call(inner: (...args: any[]) => any) {
 
     agent.exports.insert(inner.name, {
         property_key: "call",
-        adder: (scope: Scope) => scope.add("fn_decl", Scope.ident(inner.name))
+        adder: (scope: Scope) => scope.addFromId("fn_decl", Scope.ident(inner.name))
     })
+
+    if (params?.input !== undefined) {
+        if (inner.name === "getProgramInput") {
+            throw RuntimeError("`getProgramInput` clashes with the name of a builtin: use a different ident")
+        }
+
+        agent.exports.insert("getProgramInput", {
+            property_key: "getContext",
+            adder: (scope: Scope) => scope.addNode({
+                "type": "ts",
+                fmt: `
+/**
+ * Get the input of the program. You must use this first.
+ *
+ * @returns {string} The input of the program.
+ */
+function getProgramInput(): string;
+`,
+                id: "builtin.getInput"
+            })
+        })
+    }
 
     return await agent
 }

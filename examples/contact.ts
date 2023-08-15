@@ -8,7 +8,6 @@ type UserInformation = {
     order_number?: string
 }
 
-@ai.prompts(import.meta.url)
 class GetOrderDetails extends ai.Agent {
     info: UserInformation = {}
 

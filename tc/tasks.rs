@@ -71,6 +71,13 @@ where
         let source_text = String::from_utf8(buf)?;
         prompt_writer.set_fmt(source_text)?;
 
+        let closure = filtered_module
+            .find_closure_of_type_refs(&fn_decl.type_refs)
+            .into_iter()
+            .map(|id| format!("type_alias_decl.{}", ast::Ident::from(id)));
+
+        prompt_writer.add_to_context(closure)?;
+
         prompt_writer.push()?;
     }
 

@@ -26,10 +26,9 @@ Here is the abbreviated code of the program:
 ${blockQuote(flattened)}
 
 I am going to feed this discussion to an API. So do not be verbose, just tell me which function you want 
-to call, with what argument, and I will tell you what the returned value is. Each of your prompts must 
-be of the following JSON form:
+to call, with what argument, and I will tell you what the returned JSON encoded value is. Each of your prompts
+must be of the following JSON form:
 
-\`\`\`json
 {
    "name": "the name of the function you want to call",
    "reasoning": "the reasoning that you've used to arrive to the conclusion you should use this function",
@@ -37,7 +36,6 @@ be of the following JSON form:
         // ... the arguments of the function you want to call
    ]
 }
-\`\`\`
 
 You must make sure that the function you are calling accepts the arguments you give it. This includes
 checking the arguments have the correct type for that function (refer to the types defined above, and the 
@@ -65,8 +63,7 @@ Remember, your answers must be valid JSON objects, conforming to the following f
 }
 \`\`\`
 
-Your answer must not include anything other than a valid JSON object.
-`
+Your answer must not include anything other than a valid JSON object.`
     }
 }
 

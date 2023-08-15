@@ -19,7 +19,7 @@ and have them run anywhere.
 <br/>
 
 <p align="center">
-  <a href="./examples/hello-world.ts"><img src="resources/example-3.png" width="600" style="border-radius: 10px;"/></a>
+  <a href="./examples/be-encouraging.ts"><img src="resources/example-3.png" width="600" style="border-radius: 10px;"/></a>
 </p>
 
 <br/>
