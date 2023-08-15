@@ -19,7 +19,8 @@ class HelloWorld extends ai.Agent {
      */
     @ai.use
     end(hello: string) {
-        this.resolve(hello)
+        console.log(hello)
+        this.resolve()
     }
 
     /**
@@ -35,5 +36,5 @@ class HelloWorld extends ai.Agent {
     }
 }
 
-console.log(await new HelloWorld())
+await ai.run(new HelloWorld())
 

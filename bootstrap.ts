@@ -7,7 +7,7 @@ export type LogLevel = "silent" | "quiet" | "introspective" | "debug"
 
 let LOG_LEVEL: LogLevel = "introspective"
 
-const TRACKWAY_REPO = "https://github.com/brokad/trackway"
+const TRACKWAY_REPO = "ssh://git@github.com/brokad/trackway"
 
 export function setLogLevel(level: LogLevel) {
     LOG_LEVEL = level

@@ -11,11 +11,32 @@ type Feedback = {
     activity: string
 }
 
-function process(feedback: Feedback) {
-    console.log(feedback)
+class ExtractFeedback extends ai.Agent {
+    constructor(public raw: string) { super() }
+
+    /**
+     * Obtain a raw feedback string
+     *
+     * @returns {string} A raw feedback string
+     */
+    @ai.use
+    getRawFeedback(): string {
+        return this.raw
+    }
+
+    /**
+     * Print a structured {Feedback} derived from a raw feedback
+     *
+     * @param {Feedback} structured a structured feedback object
+     */
+    @ai.use
+    printStructuredFeedback(structured: Feedback) {
+        console.log(structured)
+        this.resolve()
+    }
 }
 
-await ai.call(process, "I'm the biggest fan of Game of Thrones!!")
+ai.run(new ExtractFeedback("I love Game of Thrones!"))
 
 // prints:
 // {

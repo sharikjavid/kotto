@@ -119,13 +119,9 @@ export class Agent {
     resolved?: any = undefined
     is_done = false
 
-    resolve(value: any) {
+    resolve(value?: any) {
         this.is_done = true
         this.resolved = value
-    }
-
-    then(onResolve, onReject) {
-        return (new AgentController(this)).then(onResolve, onReject)
     }
 }
 
@@ -242,10 +238,6 @@ export class AgentController {
 
         return resolved
     }
-
-    then(onResolve, onReject) {
-        return this.runToCompletion().then(onResolve, onReject)
-    }
 }
 
 async function call(inner: (...args: any[]) => any, input?: string) {
@@ -299,6 +291,10 @@ function getProgramInput(): string;
     return await agent
 }
 
+function run(agent: Agent): Promise<any> {
+    return (new AgentController(agent)).runToCompletion()
+}
+
 export default {
     Agent,
     AgentController,
@@ -308,5 +304,6 @@ export default {
     Interrupt,
     setLogLevel,
     getLogLevel,
-    call
+    call,
+    run
 }
