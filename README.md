@@ -35,14 +35,14 @@ and have them run anywhere.
     - [Get an OpenAI key](#get-an-openai-key)
 - [Examples](#examples)
     - [Hello, World!](./examples/hello-world.ts)
-    - [Extracting information](./examples/contact.ts)
-    - [Transforming types](./examples/poems.ts)
-    - [And more!](./examples)
+    - [Hello, World! (interactive)](./examples/hello-world-interactive.ts)
+    - [Extracting information](./examples/extract-feedback.ts)
 - [Documentation](#documentation)
     - [Imports](#imports)
     - [Building agents](#building-agents)
     - [@prompts](#prompts)
     - [@use](#use)
+    - [call: calling one function](#call-calling-one-function)
     - [Exceptions](#exceptions)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
@@ -182,7 +182,7 @@ that
 have the decorator are exposed to the LLM**. Other methods are unknown to the model, which helps with security (by
 restricting information privilege) and helps to deal with restrictions on maximum context sizes.
 
-### call
+### call: Calling one function
 
 The `call` function is sugar for a basic input/output agent. It is useful for quick tasks related to transforming unstructured text
 into structured data.
@@ -218,8 +218,9 @@ await ai.call(callback, "Don't ever play yourself.")
 // prints: shakespeare
 ```
 
-will print "shakespeare"!In those sorts of situations, it is often better to define an explicit agent with 
-multiple methods as in [hello-world-interactive.ts](./examples/hello-world-interactive.ts)
+will print "shakespeare"! 
+
+It is often better to define an explicit agent with multiple methods as in [hello-world-interactive.ts](./examples/hello-world-interactive.ts)
 
 ### Exceptions
 
