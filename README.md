@@ -117,13 +117,10 @@ In order to build an agent, extend the `Agent` class:
 ```typescript
 import ai from "https://damien.sh/trackway/mod.ts"
 
-@ai.prompts(import.meta.url)
 class MyAgent extends ai.Agent {
     // ...
 }
 ```
-
-Note the [@prompts](#prompts) is required (see below).
 
 This makes instances of the `MyAgent`
 class [await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await)'able. Each await
@@ -135,9 +132,7 @@ awaits for completion of the task:
 // Create a new instance of MyAgent:
 const myAgent = new MyAgent()
 
-// Do things to myAgent's state...
-
-// Give control to the LLM, awaiting the output:
+// Give control to the LLM and wait for the output:
 const output = await myAgent
 ```
 
@@ -149,7 +144,6 @@ path for the LLM to complete the task autonomously:
 ```typescript
 import ai from "https://damien.sh/trackway/mod.ts"
 
-@ai.prompts(import.meta.url)
 class BeEncouraging extends ai.Agent {
     @ai.use
     endImmediately(an_encouraging_statement: string) {
@@ -166,9 +160,9 @@ See below for the [@use](#use) annotation, which makes a method available to the
 
 ### @prompts
 
-The `@prompts` decorator accepts one `string` argument. This should be the path to the `.ts` file which contains the
-source of the agent. So generally, you'll want to use
-the [`import.meta` API](https://deno.land/manual/runtime/import_meta_api):
+The `@prompts` decorator accepts one `string` argument. This should be the URL to the `.ts` file which contains the
+source of the agent. The default is to use the main module (i.e. the module you are running with `deno run`) and you generally don't need to change it. 
+If you need to override it, you'll generally want to use the [`import.meta` API](https://deno.land/manual/runtime/import_meta_api):
 
 ```typescript
 import ai from "https://damien.sh/trackway/mod.ts"
@@ -187,6 +181,41 @@ The `@use` decorator can be added to any method of [a class which extends `Agent
 that
 have the decorator are exposed to the LLM**. Other methods are unknown to the model, which helps with security (by
 restricting information privilege) and helps to deal with restrictions on maximum context sizes.
+
+### call
+
+The `call` function is sugar for a basic input/output agent. It is useful for quick tasks related to transforming unstructured text
+into structured data.
+
+It takes as input a named function and an optional string to provide additional context to the model:
+
+```typescript
+import ai from "https://damien.sh/trackway/mod.ts"
+
+type Poet = "shakespeare" | "dickinson" | "wordsworth" | "eliot"
+
+/**
+ * @param {Poet} poet The poet who wrote the input sentence
+ */
+function callback(poet: Poet) {
+    console.log(poet)
+}
+
+await ai.call(callback, "Hope is the thing with feathers that perches in the soul.")
+
+// prints: dickinson
+```
+
+If you need more control and multiple action paths (e.g. for handling malformed inputs or errors), look at 
+[Building agents](#building-agents). For example, rerunning the example above with a famous quote from 
+[DJ Khaled](https://en.wikipedia.org/wiki/DJ_Khaled):
+
+```typescript
+await ai.call(callback, "Don't ever play yourself.")
+```
+
+will print "shakespeare". In those sorts of situations, it is often better to define an explicit agent with 
+multiple methods as in [hello-world-interactive.ts](./examples/hello-world-interactive.ts)
 
 ### Exceptions
 
