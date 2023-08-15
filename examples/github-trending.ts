@@ -2,7 +2,7 @@ import ai from "../mod.ts"
 
 type Repository = {
     full_name: string
-    stargarzers_count: number
+    stargazers_count: number
 }
 
 class TopTrending extends ai.Agent {
@@ -39,7 +39,7 @@ class TopTrending extends ai.Agent {
             return data.items.slice(0, 3).map((repo) => {
                 return {
                     full_name: repo.full_name,
-                    stargarzers_count: repo.stargarzers_count
+                    stargazers_count: repo.stargazers_count
                 }
             })
         } catch (err) {
