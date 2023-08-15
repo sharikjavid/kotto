@@ -1,6 +1,5 @@
 import ai from "../mod.ts"
 
-@ai.prompts(import.meta.url)
 class HelloWorld extends ai.Agent {
     /**
      * Ask the user in what language they want to hear "Hello, world!"
@@ -10,7 +9,7 @@ class HelloWorld extends ai.Agent {
      */
     @ai.use
     ask(query: string): string {
-        return prompt(query)
+        return prompt(query)!
     }
 
     /**
@@ -37,3 +36,4 @@ class HelloWorld extends ai.Agent {
 }
 
 console.log(await new HelloWorld())
+

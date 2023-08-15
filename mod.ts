@@ -1,10 +1,11 @@
 import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
 
-import { parse as parsePath, join as joinPath, fromFileUrl, toFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
-import { ensureDir } from "https://deno.land/std@0.198.0/fs/mod.ts"
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
-import { doRun, getLogLevel, setLogLevel, warn, debug } from "./bootstrap.ts"
+import { RuntimeError, Interrupt } from "./errors.ts"
+import { getLogLevel, setLogLevel, warn, debug } from "./bootstrap.ts"
+import { Prompts, Scope } from "./prompts.ts"
+import { Naive, Template } from "./const.ts"
 
 export function thought(content?: string) {
     switch (getLogLevel()) {
@@ -15,28 +16,10 @@ export function thought(content?: string) {
     }
 }
 
-export class RuntimeError extends Error {
-    constructor(message) {
-        super(message)
-        this.name = "RuntimeError"
-    }
-}
-
-export class Interrupt extends Error {
-    constructor(message) {
-        super(message)
-        this.name = "Interrupt"
-    }
-}
-
 export type FunctionCall = {
     name: string,
     reasoning?: string,
     arguments: any[]
-}
-
-function blockQuote(s: string, type?: string): string {
-    return `\`\`\`${type || "TypeScript"}\n${s}\n\`\`\``
 }
 
 class LLM {
@@ -93,17 +76,17 @@ export class ExportsMap {
     #inner: Map<string, ExportDescriptor> = new Map()
 
     get(property_key: string): ExportDescriptor | undefined {
-        return this.#inner.get(propertyKey)
+        return this.#inner.get(property_key)
     }
 
     insert(property_key: string, descriptor: ExportDescriptor) {
-        this.#inner.set(propertyKey, descriptor)
+        this.#inner.set(property_key, descriptor)
     }
 }
 
 type ConstructorDecorator = <T extends { new (...args: any[]): {} } >(constructor: T) => any
 
-type MethodDecorator = (target: any, property_key: string, descriptor: PropertyDescriptor) => void
+type MethodDecorator = (target: object, property_key: string, descriptor: PropertyDescriptor) => void
 
 const description_decorator = (task: string) => {
     return <T extends { new (...args: any[]): {} } >(constructor: T) => {
@@ -130,8 +113,7 @@ const use_decorator: () => MethodDecorator = () => {
 
 export class Agent {
     resolved?: any = undefined
-    is_done: boolean = false
-    description?: string
+    is_done = false
 
     resolve(value: any) {
         this.is_done = true
@@ -150,95 +132,14 @@ type PromptDescriptor = {
     context: string[]
 }
 
-export class Prompts {
-    #source_url: URL
-    #prompts
-
-    constructor(url: string) {
-        this.#source_url = new URL(url)
-    }
-
-    async load() {
-        const source_url = this.#source_url
-
-        // TODO: don't use path stuff for URLs
-        const parsed_path = parsePath(source_url.pathname)
-
-        if (source_url.protocol !== "file:") {
-            // if remote module, try to get `.prompts.js` for an early win
-            const prompts_path = new URL(source_url)
-            prompts_path.pathname = `${parsed_path.dir}/${parsed_path.name}.prompts.js`
-            try {
-                this.#prompts = await import(prompts_path)
-                return
-            }
-            catch (e) {
-                if (e instanceof TypeError && e.code === "ERR_MODULE_NOT_FOUND") {
-                    // absorb silently, we'll build below
-                } else {
-                    throw e
-                }
-            }
-        }
-
-        const local_build_path = joinPath(Deno.cwd(), ".trackway", "builds")
-
-        await ensureDir(local_build_path)
-
-        const proc = await doRun({
-            urls: [source_url],
-            output_path: local_build_path
-        })
-
-        if (!(await proc?.status)?.success) {
-            throw new RuntimeError("tc exited unsuccessfully")
-        }
-
-        const output_path = toFileUrl(joinPath(local_build_path, `${parsed_path.name}.prompts.js`))
-
-        this.#prompts = await import(output_path)
-    }
-
-    regexFor(kind: string, name: string | string[]) {
-        let regex = `^${kind}`
-
-        let names
-        if (typeof name === "string") {
-            names = [name]
-        } else {
-            names = name
-        }
-
-        regex = regex.concat(...names.map((n) => `\\.${n}#\\d+`), "$")
-
-        return new RegExp(regex)
-    }
-
-    iterFor(kind: string, name: string) {
-        const regex = this.regexFor(kind, name)
-        return this.#prompts.ast.filter((node) => regex.test(node.id))
-    }
-
-    getTypeAliasDecls(): string[] {
-        return this.iterFor("type_alias_decl", "\\w+").map((m) => m.fmt)
-    }
-
-    getClassDecl(of: string): string | undefined {
-        return this.iterFor("class_decl", of).pop()?.fmt
-    }
-
-    getMethodDecls(of_class: string): string[] {
-        return this.iterFor("method_decl", [of_class, "\\w+"]).map((m) => m.fmt)
-    }
-}
-
 type Action = {
     call: FunctionCall,
-    output?: any
+    output?: object
 }
 
 interface AnnotatedAgent extends Agent {
     prompts?: string
+    template?: Template
     exports: ExportsMap
 }
 
@@ -246,63 +147,24 @@ export class AgentController {
     agent: AnnotatedAgent
     llm: LLM
     prompts: Prompts
-    do_init: Promise<void>
+    template: Template
     history: Action[] = []
 
     constructor(agent: AnnotatedAgent) {
         agent.is_done = false
         agent.resolved = undefined
-        this.agent = agent
         this.llm = new LLM()
-
-        let prompts = agent.prompts
-        if (prompts === undefined) {
-            prompts = Deno.mainModule
-        }
-
-        this.prompts = new Prompts(prompts)
-        this.do_init = new Promise(this.doInit().then)
+        this.prompts = new Prompts(agent.prompts)
+        this.prompts.spawnBackgroundInit()
+        this.template = agent.template || Naive
+        this.agent = agent
     }
 
-    async doInit() {
-        await this.prompts.load()
-    }
-
-    outputTemplate(): string {
-        return blockQuote(`{
-   "name": "the name of the function you want to call",
-   "reasoning": "the reasoning that you've used to arrive to the conclusion you should use this function",
-   "arguments": [
-        // ... the arguments of the function you want to call
-   ] 
-}
-`, "json")
-    }
-
-    initialPrompt(): string {
+    renderContext(): string {
+        const scope = this.prompts.newScope()
         const class_name = this.agent.constructor.name
-        const method_decls = this.prompts.getMethodDecls(class_name).join("\n\n")
-        const type_alias_decls = this.prompts.getTypeAliasDecls().join("\n\n")
-        const all_code = [type_alias_decls, method_decls].join("\n\n")
-
-        return `You are the runtime of a JavaScript program, you decide which functions to call.
-
-Here is the abbreviated code of the program:
-
-${blockQuote(all_code)}
-
-I am going to feed this discussion to an API. So do not be verbose, just tell me which function you want 
-to call, with what argument, and I will tell you what the returned value is. Each of your prompts must 
-be of the following JSON form:
-
-${this.outputTemplate()}
-
-You must make sure that the function you are calling accepts the arguments you give it. This includes
-checking the arguments have the correct type for that function (refer to the types defined above, and the 
-built-in type definitions that are part of JavaScript/TypeScript's specification).
-
-Let's begin!
-`
+        scope.add("method_decl", Scope.ident(class_name), Scope.child)
+        return this.template.renderContext(scope)
     }
 
     async doAction(action: Action) {
@@ -320,17 +182,17 @@ Let's begin!
         }
     }
 
-    async doNext(prompt?: string, role?: string): Promise<any> {
+    async doNext(prompt?: string, role?: "user" | "system"): Promise<any> {
         if (this.agent.is_done) {
             throw new Error("agent is done")
         }
 
         if (prompt === undefined) {
             if (this.llm.messages.length == 0) {
-                prompt = this.initialPrompt()
+                prompt = this.renderContext()
             } else {
                 const last = this.history[this.history.length - 1]
-                prompt = blockQuote(JSON.stringify(last.output), "json")
+                prompt = this.template.renderOutput(last.output)
             }
         }
 
@@ -353,33 +215,40 @@ Let's begin!
     }
 
     async runToCompletion(): any {
-        await this.do_init
+        await this.prompts.ensureReady()
 
         let resolved
         do {
-            try {
-                resolved = await this.doNext()
-            } catch (e) {
-                if (!(e instanceof Interrupt)) {
-                    warn(`caught an exception: ${e}`)
+            resolved = await this.doNext().catch((err) => {
+                if (!(err instanceof Interrupt)) {
+                    warn(`caught an exception: ${err}`)
                     warn("asking the llm to fix it")
-                    resolved = await this.doNext(`
-error: ${e}. 
-
-Remember, your answers must be valid JSON objects, conforming to the following format:
-
-${this.outputTemplate()}
-`)
+                    const error_prompt = this.template.renderError(err)
+                    return this.doNext(error_prompt)
                 } else {
-                    throw e
+                    throw err
                 }
-            }
+            })
         } while (!this.agent.is_done)
+
         return resolved
     }
 
     then(onResolve, onReject) {
         return this.runToCompletion().then(onResolve, onReject)
+    }
+}
+
+async function fn(inner: (...args: any[]) => any) {
+    const prompts = new Prompts()
+    await prompts.ensureReady()
+
+    if (inner.name === undefined) {
+        throw new Error("TODO")
+    } else {
+        // TODO(brokad): what if this gets minified?
+        const decl = prompts.getDecl(`fn_decl.${inner.name}`)
+        
     }
 }
 
@@ -391,5 +260,6 @@ export default {
     prompts: prompts_decorator,
     Interrupt,
     setLogLevel,
-    getLogLevel
+    getLogLevel,
+    fn
 }

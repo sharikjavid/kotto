@@ -11,6 +11,7 @@ use visit::Visit;
 mod type_alias_decl;
 mod class_decl;
 mod type_ref;
+mod function;
 
 pub use type_alias_decl::{TypeAliasDecl, TypeAliasVisitor};
 pub use class_decl::{ClassDecl, ClassDeclVisitor};
