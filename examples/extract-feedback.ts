@@ -15,9 +15,7 @@ function process(feedback: Feedback) {
     console.log(feedback)
 }
 
-await ai.call(process, {
-    input: "I'm the biggest fan of Game of Thrones!!"
-})
+await ai.call(process, "I'm the biggest fan of Game of Thrones!!")
 
 // prints:
 // {

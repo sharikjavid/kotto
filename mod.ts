@@ -248,11 +248,7 @@ export class AgentController {
     }
 }
 
-export type CallParams = {
-    input?: string
-}
-
-async function call(inner: (...args: any[]) => any, params?: CallParams) {
+async function call(inner: (...args: any[]) => any, input?: string) {
     if (inner.name === undefined) {
         throw new Error("`call` can only be used with top-level named functions")
     }
@@ -263,7 +259,7 @@ async function call(inner: (...args: any[]) => any, params?: CallParams) {
         exports: ExportsMap = new ExportsMap()
 
         async getContext(): string {
-            return params?.input!
+            return input!
         }
 
         async call(...args: any[]) {
@@ -278,7 +274,7 @@ async function call(inner: (...args: any[]) => any, params?: CallParams) {
         adder: (scope: Scope) => scope.addFromId("fn_decl", Scope.ident(inner.name))
     })
 
-    if (params?.input !== undefined) {
+    if (input !== undefined) {
         if (inner.name === "getProgramInput") {
             throw RuntimeError("`getProgramInput` clashes with the name of a builtin: use a different ident")
         }
