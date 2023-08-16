@@ -42,7 +42,7 @@ class Logger {
     calls(name: string, args: any[]) {
         const pretty_fn = colors.cyan(colors.bold(name))
         const pretty_args = args.map(arg => colors.dim(JSON.stringify(arg))).join(", ")
-        this.trace("call", `${pretty_fn}(${pretty_args})`)
+        this.trace("func", `${pretty_fn}(${pretty_args})`)
     }
 
     stringify(value: any): string {
@@ -74,11 +74,11 @@ class Logger {
 
     exit(err: Exit) {
         const pretty_value = colors.dim(this.stringify(err.value))
-        this.trace("✅", pretty_value)
+        this.trace(colors.green("exit"), pretty_value)
     }
 
     thought(msg: string) {
-        this.trace(colors.gray("thought"), colors.gray(msg))
+        this.trace(colors.gray("╭"), colors.gray(msg))
     }
     
     eprint(msg: string, header?: string = "trackway", color?: string = "cyan") {
