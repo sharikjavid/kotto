@@ -1,20 +1,9 @@
 import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
 
-import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
-
-import { RuntimeError, Interrupt, Feedback, Done } from "./errors.ts"
-import { getLogLevel, setLogLevel, warn, debug } from "./bootstrap.ts"
+import { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
 import { Prompts, Scope } from "./prompts.ts"
 import { Naive, Template } from "./const.ts"
-
-export function thought(content?: string) {
-    switch (getLogLevel()) {
-        case "introspective":
-        case "debug":
-            console.log(colors.gray(`llm: ${content || "(no reasoning given)"}`))
-            break;
-    }
-}
+import logger from "./log.ts"
 
 export type FunctionCall = {
     name: string,
@@ -62,7 +51,6 @@ class LLM {
 
     async call(messages: ChatCompletionRequestMessage[]): Promise<FunctionCall> {
         const resp = await this.send(messages)
-        debug({ text: `API response ${resp.content}`, color: colors.blue, prefix: "openai" })
         return JSON.parse(resp.content)
     }
 }
@@ -133,10 +121,6 @@ export interface Agent {
     template?: Template
 
     exports: ExportsMap
-
-    is_done: boolean
-
-    resolved?: any
 }
 
 export class AgentController {
@@ -169,7 +153,12 @@ export class AgentController {
 
         if (export_descriptor !== undefined) {
             const call_name = export_descriptor.property_key
-            const output = await (this.agent[call_name])(...action.call.arguments)
+            const args = action.call.arguments
+
+            logger.calls(call_name, args)
+            const output = await (this.agent[call_name])(...args)
+            logger.returns(output)
+
             action.output = output
             this.history.push(action)
         } else {
@@ -195,14 +184,12 @@ export class AgentController {
             role = "system"
         }
 
-        debug({ text: prompt, color: colors.yellow, prefix: "prompt" })
-
         const response = await this.llm.call([{
             "role": role,
             "content": prompt
         }])
 
-        thought(response.reasoning)
+        logger.thought(response.reasoning)
 
         await this.doAction({ call: response })
     }
@@ -219,12 +206,16 @@ export class AgentController {
             catch (err) {
                 // TODO backoff
                 if (err instanceof Feedback) {
-                    
+                    logger.feedback(err)
                     prompt = err.message
                 } else if (err instanceof Interrupt) {
+                    logger.interrupt(err)
+                    throw err.value
+                } else if (err instanceof Exit) {
+                    logger.exit(err)
                     return err.value
                 } else {
-                    warn(`caught: ${err}; asking llm to fix it`)
+                    logger.error(err)
                     prompt = this.template.renderError(err)
                 }
             }
@@ -232,7 +223,8 @@ export class AgentController {
     }
 }
 
-function run(agent: Agent): Promise<any> {
+function run(agent: any): Promise<any> {
+    // TODO check agent has the interface
     return (new AgentController(agent)).runToCompletion()
 }
 
@@ -243,7 +235,8 @@ export default {
     prompts: prompts_decorator,
     Interrupt,
     Feedback,
-    setLogLevel,
-    getLogLevel,
+    Exit,
+    setLogLevel: logger.setLogLevel,
+    getLogLevel: logger.getLogLevel,
     run
 }

@@ -1,16 +1,16 @@
 import ai from "../mod.ts"
 
-class HelloWorld extends ai.Agent {
+class HelloWorld {
     /**
-     * Prints an encouraging statement.
+     * Cheer me up!
      * 
-     * @param {string} message Should be encouraging.
+     * @param {string} message An encouraging message.
      */
     @ai.use
-    print(message: string) {
-        console.log(message)
+    cheer(message: string) {
+        throw new ai.Exit(message)
     }
 }
 
-await ai.run(new HelloWorld())
+console.log(await ai.run(new HelloWorld()))
 // prints: "Keep up the good work!"

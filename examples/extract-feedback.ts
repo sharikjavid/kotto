@@ -11,8 +11,8 @@ type Feedback = {
     activity: string
 }
 
-class ExtractFeedback extends ai.Agent {
-    constructor(public raw: string) { super() }
+class ExtractFeedback {
+    constructor(public raw: string) {}
 
     /**
      * Obtain a raw feedback string
@@ -25,18 +25,17 @@ class ExtractFeedback extends ai.Agent {
     }
 
     /**
-     * Print a structured {Feedback} derived from a raw feedback
+     * End the task by providing a structured {Feedback} derived from a raw feedback
      *
      * @param {Feedback} structured a structured feedback object
      */
     @ai.use
-    printStructuredFeedback(structured: Feedback) {
-        console.log(structured)
-        this.resolve()
+    end(structured: Feedback) {
+        throw new ai.Exit(structured)
     }
 }
 
-ai.run(new ExtractFeedback("I love Game of Thrones!"))
+console.log(await ai.run(new ExtractFeedback("I love Game of Thrones!")))
 
 // prints:
 // {

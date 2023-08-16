@@ -1,6 +1,6 @@
 import ai from "../mod.ts"
 
-class HelloWorld extends ai.Agent {
+class HelloWorld {
     /**
      * Ask the user in what language they want to hear "Hello, world!"
      *
@@ -19,8 +19,7 @@ class HelloWorld extends ai.Agent {
      */
     @ai.use
     end(hello: string) {
-        console.log(hello)
-        this.resolve()
+        throw new ai.Exit(hello)
     }
 
     /**
@@ -36,5 +35,7 @@ class HelloWorld extends ai.Agent {
     }
 }
 
-await ai.run(new HelloWorld())
-
+console.log(await ai.run(new HelloWorld()))
+// asks: "What language do you prefer?"
+// write: "English, please!"
+// prints: "Hello, World!"
