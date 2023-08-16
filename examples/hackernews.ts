@@ -84,7 +84,6 @@ class LabelHN {
      */ 
     @ai.use
     setMatchingKeywords(id: Id, keywords: string[]) {
-
         // If the model is proposing too many new keywords, force it to summarise...
         const new_keywords = keywords.filter(item => !this.keywords.has(item))
         if (new_keywords.length > 1)
@@ -93,7 +92,10 @@ class LabelHN {
         // ...otherwise save the keywords and end this task
         new_keywords.forEach(item => this.keywords.add(item))
 
-        throw new ai.Exit([id, keywords])
+        throw new ai.Exit({
+            post_id: id,
+            keywords: keywords
+        })
     }
 }
 
@@ -105,6 +107,6 @@ myCrawler.queue = await fetchHN<Id[]>("/v0/topstories.json?print=pretty")
 
 // While there are posts in the queue...
 while (myCrawler.queue.length != 0) {
-    // ...run the agent on the next item, until it reaches an `ai.exit` point
+    // ...run the agent on the next item, until it reaches an `ai.Exit` point
     await ai.run(myCrawler)
 }
