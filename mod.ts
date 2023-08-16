@@ -2,7 +2,7 @@ import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuratio
 
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
-import { RuntimeError, Interrupt } from "./errors.ts"
+import { RuntimeError, Interrupt, Feedback, Done } from "./errors.ts"
 import { getLogLevel, setLogLevel, warn, debug } from "./bootstrap.ts"
 import { Prompts, Scope } from "./prompts.ts"
 import { Naive, Template } from "./const.ts"
@@ -115,16 +115,6 @@ const use_decorator: MethodDecorator = (target: any, property_key: string, _desc
     })
 }
 
-export class Agent {
-    resolved?: any = undefined
-    is_done = false
-
-    resolve(value?: any) {
-        this.is_done = true
-        this.resolved = value
-    }
-}
-
 type PromptDescriptor = {
     ty: "plain_text" | "ts"
     fmt: string
@@ -137,7 +127,7 @@ type Action = {
     output?: object
 }
 
-interface AnnotatedAgent {
+export interface Agent {
     prompts?: string
 
     template?: Template
@@ -150,13 +140,13 @@ interface AnnotatedAgent {
 }
 
 export class AgentController {
-    agent: AnnotatedAgent
+    agent: Agent
     llm: LLM
     prompts: Prompts
     template: Template
     history: Action[] = []
 
-    constructor(agent: AnnotatedAgent) {
+    constructor(agent: Agent) {
         agent.is_done = false
         agent.resolved = undefined
         this.llm = new LLM()
@@ -187,7 +177,7 @@ export class AgentController {
         }
     }
 
-    async doNext(prompt?: string, role?: "user" | "system"): Promise<any> {
+    async doNext(prompt?: string, role?: "user" | "system") {
         if (this.agent.is_done) {
             throw new Error("agent is done")
         }
@@ -215,80 +205,31 @@ export class AgentController {
         thought(response.reasoning)
 
         await this.doAction({ call: response })
-
-        return this.agent.resolved
     }
 
     async runToCompletion(): any {
         await this.prompts.ensureReady()
 
-        let resolved
-        do {
-            resolved = await this.doNext().catch((err) => {
-                if (!(err instanceof Interrupt) && !(err instanceof RuntimeError)) {
-                    warn(`caught an exception: ${err}`)
-                    warn("asking the llm to fix it")
-                    const error_prompt = this.template.renderError(err)
-                    return this.doNext(error_prompt)
+        let prompt: string
+        while (true) {
+            try {
+                await this.doNext(prompt)
+                prompt = undefined
+            }
+            catch (err) {
+                // TODO backoff
+                if (err instanceof Feedback) {
+                    
+                    prompt = err.message
+                } else if (err instanceof Interrupt) {
+                    return err.value
                 } else {
-                    throw err
+                    warn(`caught: ${err}; asking llm to fix it`)
+                    prompt = this.template.renderError(err)
                 }
-            })
-        } while (!this.agent.is_done)
-
-        return resolved
-    }
-}
-
-async function call(inner: (...args: any[]) => any, input?: string) {
-    if (inner.name === undefined) {
-        throw new Error("`call` can only be used with top-level named functions")
-    }
-
-    // TODO: what if this gets minified?
-
-    class CallAgent extends Agent {
-        exports: ExportsMap = new ExportsMap()
-
-        async getContext(): string {
-            return input!
-        }
-
-        async call(...args: any[]) {
-            this.resolve(await inner(...args))
+            }
         }
     }
-
-    const agent = new CallAgent()
-
-    agent.exports.insert(inner.name, {
-        property_key: "call",
-        adder: (scope: Scope) => scope.addFromId("fn_decl", Scope.ident(inner.name))
-    })
-
-    if (input !== undefined) {
-        if (inner.name === "getProgramInput") {
-            throw RuntimeError("`getProgramInput` clashes with the name of a builtin: use a different ident")
-        }
-
-        agent.exports.insert("getProgramInput", {
-            property_key: "getContext",
-            adder: (scope: Scope) => scope.addNode({
-                "type": "ts",
-                fmt: `
-/**
- * Get the input of the program. You must use this first.
- *
- * @returns {string} The input of the program.
- */
-function getProgramInput(): string;
-`,
-                id: "builtin.getInput"
-            })
-        })
-    }
-
-    return await agent
 }
 
 function run(agent: Agent): Promise<any> {
@@ -296,14 +237,13 @@ function run(agent: Agent): Promise<any> {
 }
 
 export default {
-    Agent,
     AgentController,
     use: use_decorator,
     task: description_decorator,
     prompts: prompts_decorator,
     Interrupt,
+    Feedback,
     setLogLevel,
     getLogLevel,
-    call,
     run
 }
