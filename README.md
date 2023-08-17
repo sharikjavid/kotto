@@ -50,209 +50,106 @@ and have them run anywhere.
 
 ## Getting Started
 
-If you already have Deno and an OpenAI key, you can try out the [examples](./examples) interactively by running:
+### 1. OpenAI API
+
+Trackway uses OpenAI's chat completion API as the only currently supported LLM provider. You will need the key available
+under the OPENAI_KEY environment variable:
 
 ```bash
-deno run https://damien.sh/trackway/examples/mod.ts
+$ export OPENAI_KEY="TOP SECRET KEY"
 ```
 
-If you want to try just one specific example out, replace "mod.ts" by the example file (e.g. "hello-world.ts").
+If you want to know exactly what gets sent to OpenAI (i.e. what gets embedded in the prompts), take a look
+at [FAQ: How safe is it?](#how-safe-is-it).
 
-See [Install Deno](#install-deno) and [Get an OpenAI key](#get-an-openai-key) if you need to set those up. Otherwise,
-head over to the [docs](#documentation) to learn how to build your own agents!
+### 2. Deno
 
-#### Install Deno
+Trackway is built for [Deno](https://deno.land). Make sure you have it installed, otherwise follow
+the [official installation guide](https://deno.land/manual@v1.36.1/getting_started/installation).
 
-Trackway runs on the [Deno](https://deno.land) runtime. Deno is a single binary executable with no external dependencies
-and can be
-installed quickly on macOS/Linux:
+### 3. First steps
+
+Create a file `hello.ts` and lay down the skeleton of a class:
+
+```typescript
+class Hello {
+    introduction(message: string) {
+        console.log(`introduction: ${message}`)
+    }
+}
+```
+
+We're going to ask an LLM to call this function with a nice introduction message. Add the following import and decorate
+the `introduction` function:
+
+```diff typescript
++ import ai from "https://damien.sh/trackway/mod.ts"
+
+class Hello {
++ // Call this function with an introduction of yourself
++ @ai.use
+  introduction(message: string) {
+    console.log(`introduction: ${message}`)
+    + throw new ai.Exit()
+  }
+}
+
++ await ai.run(new Hello())
+```
+
+Then run the script:
 
 ```bash
-curl -fsSL https://deno.land/x/install/install.sh | sh
+$ deno run hello.ts
+Hello, I am a JavaScript runtime.
 ```
 
-or your package manager of choice. Refer to
-the [official deno guide](https://deno.land/manual/getting_started/installation) for more.
+If this is the first time you're running the command, you will get prompted to install a [Rust companion binary](./tc).
 
-#### Get an OpenAI key
+In order to understand a bit better what's happening under the hood, let's tune up the log level:
 
-Under the hood, Trackway needs an LLM provider. Currently only OpenAI's gpt-based with the ChatCompletion API
-are supported, but other providers are on the roadmap.
+```diff typescript
+import ai from "https://damien.sh/trackway/mod.ts"
 
-Head on over to [platform.openai.com](https://platform.openai.com) to create an account and get an API key.
+class Hello {
+  // Call this function with an introduction of yourself
+  @ai.use
+  introduction(message: string) {
+    console.log(`introduction: ${message}`)
+    throw new ai.Exit()
+  }
+}
 
-Trackway will use the `OPENAI_KEY` environment variable, so export it to your current shell session:
++ ai.setLogLevel("trace")
++
+await ai.run(new Hello())
+```
+
+and run it again (this time with `-A` so we don't get prompted for permissions):
 
 ```bash
-export OPENAI_KEY="my-super-secret-key"
+$ deno run -A hello.ts
+trace:       The code has a function called introduction and it accepts a message parameter. Since the prompt asks to 
+           ╭ call this function with an introduction of myself, I will call it with a message
+trace:  call introduction("Hello, I am a JavaScript program.")
+Hello, I am a JavaScript program.
+trace:  exit null
 ```
 
-Take a look at the [How safe is it?](#how-safe-is-it) section if you want to know what gets sent to OpenAI when you use
-Trackway.
+Trackway packages the signature of the functions you tag with `@ai.use` and ships them as context for the LLM backend.
+When we call `ai.run(...)`, we kickstart an event loop which asks the backend which function they want to call, call 
+the function for them, and return the output. Except that, in this case, we don't return them anything: an `ai.Exit()` 
+exception is thrown, which terminates the event loop early.
 
 ## Examples
 
-See [examples](./examples).
+### Hello, World!
 
-## Documentation
+### Hello, World! v2
 
-### Getting Started
+### String to Type
 
-You only need one import (no install required):
-
-```typescript
-import ai from "https://damien.sh/trackway/mod.ts"
-```
-
-By default, this will always pull the latest release (recommended). If you need to peg a specific version, use a `@semver` tag:
-
-```typescript
-import ai from "https://damien.sh/trackway@0.1.0/mod.ts"
-```
-
-### Building agents
-
-In order to build an agent, extend the `Agent` class:
-
-```typescript
-import ai from "https://damien.sh/trackway/mod.ts"
-
-class MyAgent extends ai.Agent {
-    // ...
-}
-```
-
-This makes instances of the `MyAgent`
-class [await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await)'able. Each await
-statement passes control over to the LLM
-and
-awaits for completion of the task:
-
-```typescript
-// Create a new instance of MyAgent:
-const myAgent = new MyAgent()
-
-// Give control to the LLM and wait for the output:
-const output = await myAgent
-```
-
-In order to complete the task, the `Agent.resolve` method must be called.
-
-Typically, you'd want to call `Agent.resolve` from one of the methods you've exposed to the LLM. This way you create a
-path for the LLM to complete the task autonomously:
-
-```typescript
-import ai from "https://damien.sh/trackway/mod.ts"
-
-class BeEncouraging extends ai.Agent {
-    @ai.use
-    endImmediately(an_encouraging_statement: string) {
-        this.resolve(an_encouraging_statement)
-    }
-}
-
-console.log(await new BeEncouraging())
-
-// prints: "You did a great job!"
-```
-
-See below for the [@use](#use) annotation, which makes a method available to the LLM runtime.
-
-### @prompts
-
-The `@prompts` decorator accepts one `string` argument. This should be the URL to the `.ts` file which contains the
-source of the agent. The default is to use the main module (i.e. the module you are running with `deno run`) and you generally don't need to change it. 
-If you need to override it, you'll generally want to use the [`import.meta` API](https://deno.land/manual/runtime/import_meta_api):
-
-```typescript
-import ai from "https://damien.sh/trackway/mod.ts"
-
-@ai.prompts(import.meta.url)
-class MyAgent extends ai.Agent {
-    // ...
-}
-```
-
-The decorator instantiates the prompts generator and points it at the given source file.
-
-### @use
-
-The `@use` decorator can be added to any method of [a class which extends `Agent`](#building-agents). **Only the methods
-that
-have the decorator are exposed to the LLM**. Other methods are unknown to the model, which helps with security (by
-restricting information privilege) and helps to deal with restrictions on maximum context sizes.
-
-### call: Calling one function
-
-The `call` function is sugar for a basic input/output agent. It is useful for quick tasks related to transforming unstructured text
-into structured data.
-
-It takes as input a named function and an optional string to provide additional context to the model:
-
-```typescript
-import ai from "https://damien.sh/trackway/mod.ts"
-
-type Poet = "shakespeare" | "dickinson" | "wordsworth" | "eliot"
-
-/**
- * @param {Poet} poet The poet who wrote the input sentence
- */
-function callback(poet: Poet) {
-    console.log(poet)
-}
-
-await ai.call(callback, "Hope is the thing with feathers that perches in the soul.")
-
-// prints: dickinson
-```
-
-You often need more control and multiple action paths (e.g. for handling malformed inputs or errors), in which case look at 
-[Building agents](#building-agents). 
-
-For example, rerunning the example above with a famous quote from [DJ Khaled](https://en.wikipedia.org/wiki/DJ_Khaled):
-
-```typescript
-// ... inputting a quote from DJ Khaled ...
-await ai.call(callback, "Don't ever play yourself.")
-
-// prints: shakespeare
-```
-
-will print "shakespeare"! 
-
-It is often better to define an explicit agent with multiple methods as in [hello-world-interactive.ts](./examples/hello-world-interactive.ts)
-
-### Exceptions
-
-By default, any action taken by the LLM is wrapped up in a general `catch` clause. This means if a method called by the
-LLM throws an exception, it is caught first by Trackway. The exception is then wrapped in a prompt and feedback is given
-to the model, giving it a chance to correct its action. If the following action throws again, the exception is bubbled
-up, and will reach the [`await` point](#building-agents).
-
-Sometimes it is desirable, from @use methods, to throw exceptions that interrupt the agent altogether. For this, throw
-the `Interrupt` exception:
-
-```typescript
-import ai from "https://damien.sh/trackway/mod.ts"
-
-class HelloWorld extends ai.Agent {
-    // ...
-
-    /**
-     * End the conversation early.
-     *
-     * If we're unable to determine which language the user prefers, end the conversation early.
-     *
-     * @param {string} reason A reason why the conversation was ended early.
-     */
-    @ai.use
-    unable(reason: string) {
-        throw new ai.Interrupt(reason)
-    }
-}
-```
-
-These exceptions are bubbled to the calling context without going through the feedback mechanism.
+### I/O
 
 ## FAQ
 
@@ -292,10 +189,6 @@ effects your agent can produce.
 
 TL;DR: If you're dealing with untrusted user input, apply the same caution as you would when implementing any
 public-facing API.
-
-## Roadmap
-
-TODO
 
 ## Contributing
 
