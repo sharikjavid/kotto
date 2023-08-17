@@ -39,7 +39,7 @@ export class Prompts {
             }
         }
 
-        const local_build_path = joinPath(Deno.cwd(), ".trackway", "builds")
+        const local_build_path = joinPath(Deno.cwd(), "build", "prompts")
 
         await ensureDir(local_build_path)
 
