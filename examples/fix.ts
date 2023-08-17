@@ -5,7 +5,11 @@
  * asks it for help with making it work.
  *
  * For example:
- *     `deno run -A https://damien.sh/trackway/examples/fix.ts tar MyFile.tar.gz`.
+ *     `deno run -A https://damien.sh/trackway/examples/fix.ts tar MyFile.tar.gz`
+ * or
+ *     `deno run -A https://damien.sh/trackway/examples/fix.ts grep -e "???" MyFile.txt`
+ * and when it asks, tell it something like:
+ *     `grep all IP addresses in file`
  */
 
 import ai from "../mod.ts"
@@ -64,6 +68,7 @@ class HelpMe {
     }
 }
 
+// Uncomment this to disable traces
 //ai.setLogLevel("quiet")
 
 // Ask for help on the command we passes in args
