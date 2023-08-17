@@ -7,19 +7,20 @@
 </p>
 
 <h2 align="center">
-  TypeScript :heart: LLMs
+  Let your code chat with LLMs
 </h2>
 
 <br/>
 
-Trackway is a prompt-generation framework that lets you **export TypeScript code, so that it can be consumed by an LLM
-runtime**. All you need are a few annotations and well-documented functions, and you can script agents out of anything
-and have them run anywhere.
+<p align="center">
+Trackway is a framework that lets LLMs understand how to call into your code. It works by statically generating context-efficient
+prompt templates in order to provide a seamless interface between you and the LLM backend.
+</p>
 
 <br/>
 
 <p align="center">
-  <a href="./examples/hello-world.ts"><img src="resources/example.png" width="600" style="border-radius: 10px;"/></a>
+  <a href="./examples/hello-world.ts"><img src="./resources/example.png" width="600" style="border-radius: 10px;"/></a>
 </p>
 
 <br/>
@@ -79,7 +80,8 @@ class Hello {
 }
 ```
 
-We're going to ask an LLM to call this function with a nice introduction message. Add the following import and decorate
+**We're going to ask an LLM to call this function with a nice introduction message**. Add the following import and
+decorate
 the `introduction` function:
 
 ```diff typescript
@@ -131,13 +133,21 @@ and run it again (this time with `-A` so we don't get prompted for permissions):
 
 Let's unpack that.
 
-1. We see (in front of the **call** line) the agent has called `introduction` with the `"Hello, I'm a JavaScript program."` argument.
+1. We see (in front of the **call** line) the agent has called `introduction` with
+   the `"Hello, I'm a JavaScript program."` argument.
 2. Just above that (in dimmed text), we see a small explanation snippet justifying this call.
 3. Finally, we see the `throw ai.Exit()` (in front of the **exit** line).
 
-That's it! Trackway **packages the type signature of functions tagged with `@ai.use` and ships them as context** for LLM backends. When we call `ai.run(...)`, we kickstart an event loop which asks the backend which function they want to call, call
-the function for them, and return the output. Except that, in this case, we don't return anything to the LLM: an `ai.Exit()`
+That's it! Trackway **packages the type signature of functions tagged with `@ai.use` and ships them as context** for LLM
+backends. When we call `ai.run(...)`, we kickstart an event loop which asks the backend which function they want to
+call, call
+the function for them, and return the output. Except that, in this case, we don't return anything to the LLM:
+an `ai.Exit()`
 exception is thrown, which terminates the event loop early.
+
+### 4. Ok I got it, what now?
+
+Take a look at the examples below to get a sense of all the cool stuff you can build with Trackway, and get building!
 
 ## Examples
 
