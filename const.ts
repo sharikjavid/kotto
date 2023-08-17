@@ -1,14 +1,33 @@
+import { Scope } from "./prompts.ts"
+import { FunctionCall } from "./mod.ts"
+
+/**
+ * Wrap around the string with md-style block quotes
+ * @param s text to wrap
+ * @param type the block quote format (e.g. ts, js, etc)
+ */
 function blockQuote(s: string, type?: string): string {
     return `\`\`\`${type || "TypeScript"}\n${s}\n\`\`\``
 }
 
+/**
+ * A way to generate prompts from runtime objects
+ */
 export interface Template {
     renderContext: (scope: Scope) => string
+
     renderOutput: (value?: object) => string
+
     renderError: (err: Error) => string
+
     parseResponse: (resp: string) => FunctionCall
 }
 
+/**
+ * The most naive template ever
+ *
+ * Basically ask nicely if the LLM accepts to call functions and speak JSON
+ */
 export const Naive: Template = {
     renderContext: (scope: Scope) => {
         const flattened = scope
@@ -16,8 +35,6 @@ export const Naive: Template = {
             .filter((node) => node.type === "ts")
             .map((decl) => decl.fmt)
             .join("\n\n")
-
-        const output_template = `}`
 
         return `You are the runtime of a JavaScript program, you decide which functions to call.
 
@@ -40,7 +57,7 @@ You must make sure that the function you are calling accepts the arguments you g
 Let's begin!`
     },
 
-    renderOutput: (value: object) => blockQuote(JSON.stringify(value), "json"),
+    renderOutput: (value?: object) => blockQuote(JSON.stringify(value), "json"),
 
     parseResponse: (resp: string) => JSON.parse(resp),
 

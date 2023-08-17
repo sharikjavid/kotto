@@ -1,7 +1,24 @@
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 import { unicodeWidth } from "https://deno.land/std@0.198.0/console/mod.ts";
 
+import { Exit, Feedback, Interrupt } from "./errors.ts"
+
 export type LogLevel = "trace" | "quiet" | undefined
+
+type Color = "red" | "magenta" | "green" | "cyan"
+
+function toColorFn(color: Color): (_: string) => string {
+    switch (color) {
+        case "red":
+            return colors.red
+        case "magenta":
+            return colors.magenta
+        case "green":
+            return colors.green
+        case "cyan":
+            return colors.cyan
+    }
+}
 
 export function setLogLevel(level: LogLevel) {
     logger.log_level = level
@@ -35,8 +52,8 @@ class Logger {
             console.error(`${colors.dim("trace:")} ${colors.bold(header) || ""} ${message}`)
     }
 
-    arrowed(color: string, header: string, message: string) {
-        const color_fn = colors[color]!
+    arrowed(color: Color, header: string, message: string) {
+        const color_fn = toColorFn(color)
         this.trace(color_fn("⮑"), ` ${colors.bold(color_fn(header))} ${message}`)
     }
 
@@ -85,25 +102,25 @@ class Logger {
         this.trace(colors.gray("╭"), colors.gray(msg))
     }
     
-    eprint(msg: string, header?: string = "trackway", color?: string = "cyan") {
+    eprint(msg?: string, header: string = "trackway", color: Color = "cyan") {
         if (color == undefined)
             color = "cyan"
 
         if (header === undefined)
             header = "trackway"
 
-        const color_fn = colors[color]
+        const color_fn = toColorFn(color)
 
-        console.error(`${color_fn(header + ":")} ${msg}`)
+        console.error(`${color_fn(header + ":")} ${msg || ""}`)
     }
 }
 
 const logger = new Logger()
 
-export const eprint = (msg: string, header?: string, color?: string) => logger.eprint(msg, header, color)
+export const eprint = (msg: string, header?: string, color?: Color) => logger.eprint(msg, header, color)
 
 export const error = (msg: string) => eprint(msg, colors.bold("error"), "red")
 
-export const info = (msg: string) => eprint(msg)
+export const info = (msg: string) => eprint(msg, "info")
 
 export default logger

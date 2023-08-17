@@ -21,8 +21,14 @@ class LLM {
     }
 
     constructor() {
+        const apiKey = Deno.env.get("OPENAI_KEY")
+
+        if (apiKey === undefined) {
+            throw new RuntimeError("The `OPENAI_KEY` env variable must be set.")
+        }
+
         const configuration = new Configuration({
-            apiKey: Deno.env.get("OPENAI_KEY")
+            apiKey
         });
 
         this.#openai = new OpenAIApi(configuration)
@@ -47,12 +53,23 @@ class LLM {
         }
 
         const resp_msg = resp.data.choices[0].message
+
+        if (resp_msg === undefined) {
+            throw new RuntimeError("Didn't receive a completion")
+        }
+
         this.#messages.push(...messages, resp_msg)
+
         return resp_msg
     }
 
     async call(messages: ChatCompletionRequestMessage[]): Promise<FunctionCall> {
         const resp = await this.send(messages)
+
+        if (resp.content === undefined) {
+            throw new RuntimeError("Completion has empty content")
+        }
+        
         return JSON.parse(resp.content)
     }
 }
@@ -105,46 +122,47 @@ const use_decorator: MethodDecorator = (target: any, property_key: string, _desc
     })
 }
 
-type PromptDescriptor = {
-    ty: "plain_text" | "ts"
-    fmt: string
-    id: string
-    context: string[]
-}
-
 type Action = {
     call: FunctionCall,
     output?: object
 }
 
 export interface Agent {
-    prompts?: string
-
-    template?: Template
-
-    exports: ExportsMap
+    [functions: string]: any;
 }
 
 export class AgentController {
     agent: Agent
+
+    exports: ExportsMap
+
     llm: LLM
+
     prompts: Prompts
+
     template: Template
+
     history: Action[] = []
 
     constructor(agent: Agent) {
-        agent.is_done = false
-        agent.resolved = undefined
-        this.llm = new LLM()
-        this.prompts = new Prompts(agent.prompts)
-        this.prompts.spawnBackgroundInit()
-        this.template = agent.template || Naive
         this.agent = agent
+
+        this.exports = agent.exports || new ExportsMap()
+
+        this.llm = new LLM()
+
+        this.prompts = new Prompts(agent.prompts)
+
+        this.prompts.spawnBackgroundInit()
+
+        this.template = agent.template || Naive
     }
 
     renderContext(): string {
         const scope = this.prompts.newScope()
-        this.agent.exports.forEach(({ adder }) => adder(scope))
+
+        this.exports.forEach(({ adder }) => adder(scope))
+
         return this.template.renderContext(scope)
     }
 
@@ -152,20 +170,26 @@ export class AgentController {
         const exports = this.agent.exports
 
         const export_descriptor = exports.get(action.call.name)
-
-        if (export_descriptor !== undefined) {
-            const call_name = export_descriptor.property_key
-            const args = action.call.arguments
-
-            logger.calls(call_name, args)
-            const output = await (this.agent[call_name])(...args)
-            logger.returns(output)
-
-            action.output = output
-            this.history.push(action)
-        } else {
+        
+        if (export_descriptor === undefined) {
             throw new TypeError(`${action.call.name} is not a function`)
         }
+
+        const call_name = export_descriptor.property_key
+        
+        if (typeof this.agent[call_name] !== "function") {
+            throw new TypeError(`${action.call.name} is not a function`)
+        }
+
+        const args = action.call.arguments
+
+        logger.calls(call_name, args)
+        const output = await (this.agent[call_name])(...args)
+        logger.returns(output)
+
+        action.output = output
+        this.history.push(action)
+        return
     }
 
     async doNext(prompt?: string, role?: "user" | "system") {
@@ -191,16 +215,18 @@ export class AgentController {
             "content": prompt
         }])
 
-        logger.thought(response.reasoning)
+        logger.thought(response.reasoning || "(no reasoning given)")
 
         await this.doAction({ call: response })
     }
 
-    async runToCompletion(): any {
+    async runToCompletion(): Promise<any> {
         await this.prompts.ensureReady()
 
-        let prompt: string
+        let prompt: string | undefined
+        
         let role: "user" | "system" = "user"
+
         while (true) {
             try {
                 await this.doNext(prompt, role)
@@ -216,6 +242,8 @@ export class AgentController {
                 } else if (err instanceof Interrupt) {
                     logger.interrupt(err)
                     throw err.value
+                } else if (err instanceof RuntimeError) {
+                    throw err
                 } else if (err instanceof Exit) {
                     logger.exit(err)
                     return err.value

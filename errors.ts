@@ -6,6 +6,8 @@ export class RuntimeError extends Error {
 }
 
 export class Interrupt extends Error {
+    value: any
+
     constructor(value: any) {
         super("LLM execution interrupted")
         this.name = "Interrupt"
@@ -21,6 +23,8 @@ export class Feedback extends Error {
 }
 
 export class Exit extends Error {
+    value: any
+
     constructor(value: any) {
         super("LLM execution exited")
         this.name = "Return"
