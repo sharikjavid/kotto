@@ -14,7 +14,7 @@
 
 <p align="center">
 Trackway is a framework that lets LLMs understand how to call into your code. It works by statically generating context-efficient
-prompt templates in order to provide a seamless interface between you and the LLM backend.
+prompts in order to seamlessly interface code with an LLM backend.
 </p>
 
 <br/>
@@ -151,13 +151,28 @@ Take a look at the examples below to get a sense of all the cool stuff you can b
 
 ## Examples
 
+All the examples can be run with a one-liner:
+
+```bash
+$ deno run https://damien.sh/trackway/examples/${EXAMPLE_NAME}.ts
+```
+
+You don't need any extra dependency - this works magically thanks to Deno's awesome [module loader](https://deno.land/manual@v1.36.1/basics/modules#remote-import).
+
 ### Hello, World!
 
 ### Hello, World! v2
 
 ### String to Type
 
-### I/O
+### `fix`
+
+[`fix`](./examples/fix.ts) is a small utility in [77 lines of code](./examples/fix.ts) (and a lot of it are comments) that will take a command 
+you feed it and help you with getting what you want.
+
+<p align="center">
+<img width="600" src="./resources/fix.gif"/>
+</p>
 
 ## FAQ
 
