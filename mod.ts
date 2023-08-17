@@ -3,7 +3,7 @@ import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuratio
 import { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
 import { Prompts, Scope } from "./prompts.ts"
 import { Naive, Template } from "./const.ts"
-import logger from "./log.ts"
+import logger, { setLogLevel, getLogLevel } from "./log.ts"
 
 export type FunctionCall = {
     name: string,
@@ -39,14 +39,16 @@ class LLM {
             "messages": this.#messages.concat(messages)
         }
 
-        const resp = await this.#openai.createChatCompletion(req)
-        const resp_msg = resp.data.choices[0].message
-        if (resp_msg === undefined) {
-            throw new Error("TODO")
-        } else {
-            this.#messages.push(...messages, resp_msg)
-            return resp_msg
+        let resp 
+        try {
+            resp = await this.#openai.createChatCompletion(req)
+        } catch (err) {
+            throw new Interrupt(err)
         }
+
+        const resp_msg = resp.data.choices[0].message
+        this.#messages.push(...messages, resp_msg)
+        return resp_msg
     }
 
     async call(messages: ChatCompletionRequestMessage[]): Promise<FunctionCall> {
@@ -198,16 +200,19 @@ export class AgentController {
         await this.prompts.ensureReady()
 
         let prompt: string
+        let role: "user" | "system" = "user"
         while (true) {
             try {
-                await this.doNext(prompt)
+                await this.doNext(prompt, role)
                 prompt = undefined
+                role = "user"
             }
             catch (err) {
                 // TODO backoff
                 if (err instanceof Feedback) {
                     logger.feedback(err)
                     prompt = err.message
+                    role = "system"
                 } else if (err instanceof Interrupt) {
                     logger.interrupt(err)
                     throw err.value
@@ -217,8 +222,11 @@ export class AgentController {
                 } else {
                     logger.error(err)
                     prompt = this.template.renderError(err)
+                    role = "system"
                 }
             }
+
+            logger.trace()
         }
     }
 }
@@ -236,7 +244,7 @@ export default {
     Interrupt,
     Feedback,
     Exit,
-    setLogLevel: logger.setLogLevel,
-    getLogLevel: logger.getLogLevel,
+    setLogLevel,
+    getLogLevel,
     run
 }

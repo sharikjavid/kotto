@@ -25,9 +25,7 @@ Here is the abbreviated code of the program:
 
 ${blockQuote(flattened)}
 
-I am going to feed this discussion to an API. So do not be verbose, just tell me which function you want 
-to call, with what argument, and I will tell you what the returned JSON encoded value is. Each of your prompts
-must be of the following JSON form:
+Each of your prompts must be of the following valid JSON form:
 
 {
    "name": "the name of the function you want to call",
@@ -37,9 +35,7 @@ must be of the following JSON form:
    ]
 }
 
-You must make sure that the function you are calling accepts the arguments you give it. This includes
-checking the arguments have the correct type for that function (refer to the types defined above, and the 
-built-in type definitions that are part of JavaScript/TypeScript's specification).
+You must make sure that the function you are calling accepts the arguments you give it.
 
 Let's begin!`
     },

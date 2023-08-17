@@ -1,7 +1,7 @@
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 import { unicodeWidth } from "https://deno.land/std@0.198.0/console/mod.ts";
 
-export type LogLevel = "trace" | undefined
+export type LogLevel = "trace" | "quiet" | undefined
 
 export function setLogLevel(level: LogLevel) {
     logger.log_level = level
@@ -13,19 +13,20 @@ export function getLogLevel(): LogLevel {
 
 class Logger {
     stringified_max_length: number = 76
-    header_width: number = 8
+    header_width: number = 5
     log_level: LogLevel = "trace"
 
     toLogLevelNum(): number {
         switch (this.log_level) {
             case "trace":
                 return 0
+            case "quiet":
             case undefined:
                 return 1
         }
     }
     
-    trace(header: string, message: string) {
+    trace(header: string = "", message: string = "") {
         const width = unicodeWidth(colors.stripColor(header))
         const pad = this.header_width - width
         header = ' '.repeat(pad >= 0 ? pad : 0) + header
@@ -42,10 +43,13 @@ class Logger {
     calls(name: string, args: any[]) {
         const pretty_fn = colors.cyan(colors.bold(name))
         const pretty_args = args.map(arg => colors.dim(JSON.stringify(arg))).join(", ")
-        this.trace("func", `${pretty_fn}(${pretty_args})`)
+        this.trace("call", `${pretty_fn}(${pretty_args})`)
     }
 
     stringify(value: any): string {
+        if (value === undefined)
+            return "null"
+
         let output_str = JSON.stringify(value)
                     
         if (output_str.length > this.stringified_max_length)
@@ -65,7 +69,7 @@ class Logger {
 
     interrupt(err: Interrupt) {
         const pretty_value = colors.dim(this.stringify(err.value))
-        this.arrowed("yellow", "interrupt", pretty_value)
+        this.trace(colors.yellow("throw"), pretty_value)
     }
 
     error(err: Error) {
