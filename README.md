@@ -127,18 +127,16 @@ await ai.run(new Hello())
 
 and run it again (this time with `-A` so we don't get prompted for permissions):
 
-```bash
-$ deno run -A hello.ts
-trace:       The code has a function called introduction and it accepts a message parameter. Since the prompt asks to 
-           ╭ call this function with an introduction of myself, I will call it with a message
-trace:  call introduction("Hello, I am a JavaScript program.")
-Hello, I am a JavaScript program.
-trace:  exit null
-```
+<img style="border-radius: 8px" src="./resources/deno-run-hello-ts.png"/>
 
-Trackway packages the signature of the functions you tag with `@ai.use` and ships them as context for the LLM backend.
-When we call `ai.run(...)`, we kickstart an event loop which asks the backend which function they want to call, call 
-the function for them, and return the output. Except that, in this case, we don't return them anything: an `ai.Exit()` 
+Let's unpack that.
+
+1. We see (in front of the **call** line) the agent has called `introduction` with the `"Hello, I'm a JavaScript program."` argument.
+2. Just above that (in dimmed text), we see a small explanation snippet justifying this call.
+3. Finally, we see the `throw ai.Exit()` (in front of the **exit** line).
+
+That's it! Trackway **packages the type signature of functions tagged with `@ai.use` and ships them as context** for LLM backends. When we call `ai.run(...)`, we kickstart an event loop which asks the backend which function they want to call, call
+the function for them, and return the output. Except that, in this case, we don't return anything to the LLM: an `ai.Exit()`
 exception is thrown, which terminates the event loop early.
 
 ## Examples
@@ -174,7 +172,7 @@ to guarantee agents are safe against adversarial user inputs.
 
 At the level of Trackway, there are a few implemented backstops that can help.
 
-One of them is that we *never* execute code coming directly from the LLM backend. We have a pure JSON-only interface
+One of them is that we **never** execute code coming directly from the LLM backend. We have a pure JSON-only interface
 with the LLM,
 asking it for data and returning it data. So the model is unable to have side effects that you didn't expose through the
 content of your own code.
