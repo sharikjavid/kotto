@@ -21,7 +21,7 @@ type Command = {
     args: string[]
 }
 
-class HelpMe {
+class Fix {
     cmd: Command = {
         command: Deno.args[0],
         args: Deno.args.slice(1)
@@ -59,7 +59,7 @@ class HelpMe {
             throw new ai.Feedback("your command must be the same as the user's command")
 
         const flat = [cmd.command, ...cmd.args].join(" ")
-        const res = prompt(colors.dim(`llm thinks you want \`${flat}\`, is that ok? (Y/n)`))
+        const res = prompt(colors.dim("llm thinks you want \`") + flat + colors.dim("\`, is that ok? (Y/n)"))
         if (res === null || res.toLowerCase() === "y") {
             throw new ai.Exit(cmd)
         } else {
@@ -72,7 +72,7 @@ class HelpMe {
 //ai.setLogLevel("quiet")
 
 // Ask for help on the command we passes in args
-const fix = await ai.run(new HelpMe())
+const fix = await ai.run(new Fix())
 const cmd = new Deno.Command(fix.command, { args: fix.args })
 await cmd.spawn().output()
 
