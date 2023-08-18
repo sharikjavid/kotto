@@ -68,7 +68,21 @@ at [FAQ: How safe is it?](#how-safe-is-it).
 Trackway is built for [Deno](https://deno.land). Make sure you have it installed, otherwise follow
 the [official installation guide](https://deno.land/manual@v1.36.1/getting_started/installation).
 
-### 3. First steps
+### 3. Install Trackway
+
+Install the CLI:
+
+```bash
+$ curl -fsSL https://damien.sh/trackway/install.sh | sh
+```
+
+and you are ready to go! Run your first example with:
+
+```bash
+$ trackway run https://damien.sh/trackway/examples/hello-world-interactive.ts
+```
+
+## Hello, Runtime!
 
 Create a file `hello.ts` and lay down the skeleton of a class:
 
@@ -84,25 +98,22 @@ class Hello {
 decorate
 the `introduction` function:
 
-```diff typescript
-+ import ai from "https://damien.sh/trackway/mod.ts"
+```typescript
+import * as ai from "https://damien.sh/trackway/mod.ts"
 
 class Hello {
-+ // Call this function with an introduction of yourself
-+ @ai.use
+  // Call this function with an introduction of yourself
+  @ai.use
   introduction(message: string) {
     console.log(`introduction: ${message}`)
-    + throw new ai.Exit()
   }
 }
-
-+ await ai.run(new Hello())
 ```
 
 Then run the script:
 
 ```bash
-$ deno run hello.ts
+$ trackway run hello.ts
 Hello, I am a JavaScript runtime.
 ```
 
