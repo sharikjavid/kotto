@@ -59,7 +59,11 @@ class Fix {
             throw new ai.Feedback("your command must be the same as the user's command")
 
         const flat = [cmd.command, ...cmd.args].join(" ")
-        const res = prompt(colors.dim("llm thinks you want \`") + flat + colors.dim("\`, is that ok? (Y/n)"))
+
+        const res = prompt(colors.dim("llm thinks you want \`")
+            + flat
+            + colors.dim("\`, is that ok? (Y/n)"))
+
         if (res === null || res.toLowerCase() === "y") {
             throw new ai.Exit(cmd)
         } else {
@@ -71,8 +75,13 @@ class Fix {
 // Uncomment this to disable traces
 //ai.setLogLevel("quiet")
 
-// Ask for help on the command we passes in args
+if (!Deno.args[0]) {
+    console.error(`${colors.red("error:")} you must call this with a command to fix (e.g. 'fix egrep')`)
+    Deno.exit(1)
+}
+
 const fix = await ai.run(new Fix())
+
 const cmd = new Deno.Command(fix.command, { args: fix.args })
 await cmd.spawn().output()
 
