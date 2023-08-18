@@ -3,6 +3,12 @@ import { unicodeWidth } from "https://deno.land/std@0.198.0/console/mod.ts";
 
 import { Exit, Feedback, Interrupt } from "./errors.ts"
 
+/**
+ * The log level.
+ *
+ * "trace": logs every interaction with the LLM backend
+ * "quiet": do not log anything
+ */
 export type LogLevel = "trace" | "quiet"
 
 type Color = "red" | "magenta" | "green" | "cyan"
@@ -20,10 +26,17 @@ function toColorFn(color: Color): (_: string) => string {
     }
 }
 
+/**
+ * Set the log level.
+ * @param level
+ */
 export function setLogLevel(level: LogLevel) {
     logger.log_level = level
 }
 
+/**
+ * Get the current log level.
+ */
 export function getLogLevel(): LogLevel {
     return logger.log_level
 }
@@ -114,12 +127,10 @@ class Logger {
     }
 }
 
-const logger = new Logger()
+export const logger = new Logger()
 
 export const eprint = (msg: string, header?: string, color?: Color) => logger.eprint(msg, header, color)
 
 export const error = (msg: string) => eprint(msg, colors.bold("error"), "red")
 
 export const info = (msg: string) => eprint(msg, "info")
-
-export default logger

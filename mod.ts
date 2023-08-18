@@ -1,86 +1,37 @@
-import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
-
-import { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
 import { Prompts, Scope } from "./prompts.ts"
 import { Naive, Template } from "./const.ts"
-import logger, { setLogLevel, getLogLevel } from "./log.ts"
 
-export type FunctionCall = {
+import * as errors from "./errors.ts"
+import * as log from "./log.ts"
+import * as llm from "./llm.ts"
+
+export { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
+
+/**
+ * Set the log level.
+ */
+export const setLogLevel = log.setLogLevel
+
+/**
+ * Get the current log level.
+ */
+export const getLogLevel = log.getLogLevel
+
+const logger = log.logger
+
+type FunctionCall = {
     name: string,
     reasoning?: string,
     arguments: any[]
 }
 
-class LLM {
-    #openai: OpenAIApi
-    #messages: ChatCompletionRequestMessage[] = []
-    #base: CreateChatCompletionRequest
-
-    get messages(): ChatCompletionRequestMessage[] {
-        return this.#messages
-    }
-
-    constructor() {
-        const apiKey = Deno.env.get("OPENAI_KEY")
-
-        if (apiKey === undefined) {
-            throw new RuntimeError("The `OPENAI_KEY` env variable must be set.")
-        }
-
-        const configuration = new Configuration({
-            apiKey
-        });
-
-        this.#openai = new OpenAIApi(configuration)
-
-        this.#base = {
-            "model": "gpt-3.5-turbo",
-            "messages": []
-        }
-    }
-
-    async send(messages: ChatCompletionRequestMessage[]): Promise<ChatCompletionRequestMessage> {
-        const req: CreateChatCompletionRequest = {
-            ...this.#base,
-            "messages": this.#messages.concat(messages)
-        }
-
-        let resp 
-        try {
-            resp = await this.#openai.createChatCompletion(req)
-        } catch (err) {
-            throw new Interrupt(err)
-        }
-
-        const resp_msg = resp.data.choices[0].message
-
-        if (resp_msg === undefined) {
-            throw new RuntimeError("Didn't receive a completion")
-        }
-
-        this.#messages.push(...messages, resp_msg)
-
-        return resp_msg
-    }
-
-    async complete(messages: ChatCompletionRequestMessage[]): Promise<string> {
-        const resp = await this.send(messages)
-
-        if (resp.content === undefined) {
-            throw new RuntimeError("Completion has empty content")
-        }
-        
-        return resp.content
-    }
-}
-
-export type ExportDescriptor = {
+type ExportDescriptor = {
     property_key: string,
     adder: (scope: Scope) => void,
     description?: string
 }
 
-export class ExportsMap {
+class ExportsMap {
     #inner: Map<string, ExportDescriptor> = new Map()
 
     get(property_key: string): ExportDescriptor | undefined {
@@ -100,19 +51,19 @@ type ConstructorDecorator = <T extends { new (...args: any[]): {} } >(constructo
 
 type MethodDecorator = (target: any, property_key: string, descriptor: PropertyDescriptor) => void
 
-const description_decorator = (task: string) => {
+const description = (task: string) => {
     return <T extends { new (...args: any[]): {} } >(constructor: T) => {
         constructor.prototype.task = task
     }
 }
 
-const prompts_decorator = (prompts: string) => {
+const prompts = (prompts: string) => {
     return <T extends { new (...args: any[]): {} } >(constructor: T) => {
         constructor.prototype.prompts = prompts
     }
 }
 
-const use_decorator: MethodDecorator = (target: any, property_key: string, _descriptor?: PropertyDescriptor) => {
+export const use: MethodDecorator = (target: any, property_key: string, _descriptor?: PropertyDescriptor) => {
     if (target.exports === undefined) {
         target.exports = new Map()
     }
@@ -127,33 +78,43 @@ type Action = {
     output?: object
 }
 
+/**
+ * An agent is a class that has at least one @use decorated method.
+ *
+ * You can run agents with [[run]] or [[runOnce]].
+ */
 export interface Agent {
     [functions: string]: any;
 }
 
-type Exited = {
+export type Exited = {
     output: any
 }
 
-function isExited(pending: Exited | Pending): pending is Exited {
+export function isExited(pending: Exited | Pending): pending is Exited {
     return "output" in pending
 }
 
-type Pending = {
+export type Pending = {
     role: "user" | "system"
     prompt?: string
 }
 
-function isPending(exited: Exited | Pending): exited is Pending {
+export function isPending(exited: Exited | Pending): exited is Pending {
     return "prompt" in exited
 }
 
-export class AgentController {
+/**
+ * An agent controller is a class that manages the execution of an agent.
+ *
+ * You can run agents with [[run]] or [[runOnce]].
+ */
+class AgentController {
     agent: Agent
 
     exports: ExportsMap
 
-    llm: LLM
+    llm: llm.OpenAIChatCompletion
 
     prompts: Prompts
 
@@ -168,7 +129,7 @@ export class AgentController {
 
         this.exports = agent.exports || new ExportsMap()
 
-        this.llm = new LLM()
+        this.llm = new llm.OpenAIChatCompletion()
 
         this.prompts = new Prompts(agent.prompts)
 
@@ -222,18 +183,18 @@ export class AgentController {
         }
         catch (err) {
             // TODO backoff
-            if (err instanceof Feedback) {
+            if (err instanceof errors.Feedback) {
                 logger.feedback(err)
                 return {
                     prompt: err.message,
                     role: "system"
                 }
-            } else if (err instanceof Interrupt) {
+            } else if (err instanceof errors.Interrupt) {
                 logger.interrupt(err)
                 throw err.value
-            } else if (err instanceof RuntimeError) {
+            } else if (err instanceof errors.RuntimeError) {
                 throw err
-            } else if (err instanceof Exit) {
+            } else if (err instanceof errors.Exit) {
                 logger.exit(err)
                 return {
                     output: err.value
@@ -267,7 +228,7 @@ export class AgentController {
         try {
             response = this.template.parseResponse(completion)
         } catch (_) {
-            throw new Feedback(`could not extract JSON from your response: ${completion}`)
+            throw new errors.Feedback(`could not extract JSON from your response: ${completion}`)
         }
 
         logger.thought(response.reasoning || "(no reasoning given)")
@@ -295,7 +256,7 @@ export class AgentController {
  * Run an agent to completion.
  * @param agent
  */
-function run(agent: any): Promise<any> {
+export function run(agent: any): Promise<any> {
     // TODO check agent has the interface
     return (new AgentController(agent)).runToCompletion()
 }
@@ -304,22 +265,8 @@ function run(agent: any): Promise<any> {
  * Run an agent once.
  * @param agent
  */
-async function call(agent: any): Promise<Exited | Pending> {
+export async function runOnce(agent: any): Promise<Exited | Pending> {
     // TODO check agent has the interface
     const ctl = new AgentController(agent)
     return await ctl.tick()
-}
-
-export default {
-    AgentController,
-    use: use_decorator,
-    task: description_decorator,
-    prompts: prompts_decorator,
-    Interrupt,
-    Feedback,
-    Exit,
-    setLogLevel,
-    getLogLevel,
-    run,
-    runOnce: call
 }
