@@ -1,6 +1,6 @@
 [package]
-name = "tc"
-description = "trackway compile-time component"
+name = "trackwayc"
+description = "trackway build-time component"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true

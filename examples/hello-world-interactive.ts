@@ -1,4 +1,4 @@
-import ai from "../mod.ts"
+import * as ai from "../mod.ts"
 
 class HelloWorld {
     /**
@@ -19,6 +19,7 @@ class HelloWorld {
      */
     @ai.use
     end(hello: string) {
+        console.log(hello)
         throw new ai.Exit(hello)
     }
 
@@ -35,7 +36,7 @@ class HelloWorld {
     }
 }
 
-console.log(await ai.run(new HelloWorld()))
+export default () => new HelloWorld()
 // asks: "What language do you prefer?"
 // write: "English, please!"
 // prints: "Hello, World!"

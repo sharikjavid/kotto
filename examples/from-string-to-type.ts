@@ -1,4 +1,4 @@
-import ai from "../mod.ts"
+import * as ai from "../mod.ts"
 
 type Feedback = {
     /// An overall assessment of the feedback given
@@ -31,11 +31,12 @@ class ExtractFeedback {
      */
     @ai.use
     end(structured: Feedback) {
+        console.log(structured)
         throw new ai.Exit(structured)
     }
 }
 
-console.log(await ai.run(new ExtractFeedback("I love Game of Thrones!")))
+export default () => new ExtractFeedback("I really enjoyed watching Game of Thrones!")
 
 // prints:
 // {

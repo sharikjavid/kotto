@@ -13,14 +13,14 @@
 <br/>
 
 <p align="center">
-Trackway is a framework that lets LLMs understand how to use your code. It statically generates context-efficient
-prompts to build the most natural interfaces with language models.
+<b>Trackway is a framework that lets LLMs understand how to use your code.</b> It statically generates context-efficient
+prompts to help you build the most natural interfaces with language models.
 </p>
 
 <br/>
 
 <p align="center">
-  <a href="./examples/hello-world.ts"><img src="./resources/hello-im-js.png" width="700" style="border-radius: 10px;"/></a>
+  <a href="./examples/hello-world.ts"><img src="./resources/hello-im-js.png" width="700"/></a>
 </p>
 
 <br/>

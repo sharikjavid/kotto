@@ -12,7 +12,7 @@
  *     `grep all IP addresses in file`
  */
 
-import ai from "../mod.ts"
+import * as ai from "../mod.ts"
 
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
@@ -22,9 +22,13 @@ type Command = {
 }
 
 class Fix {
-    cmd: Command = {
-        command: Deno.args[0],
-        args: Deno.args.slice(1)
+    cmd: Command
+
+    constructor(args: string[]) {
+        this.cmd = {
+            command: args[0],
+            args: args.slice(1)
+        }
     }
 
     // Get the command the user is trying to run.
@@ -52,7 +56,7 @@ class Fix {
     // Once the user's problem is solved, this can be called with the
     // improved command.
     @ai.use
-    returnImprovedCommand(cmd: Command) {
+    async returnImprovedCommand(cmd: Command) {
         if (cmd === undefined)
             throw new ai.Feedback("you must provide a `cmd` argument")
         else if (cmd.command != this.cmd.command)
@@ -65,24 +69,29 @@ class Fix {
             + colors.dim("\`, is that ok? (Y/n)"))
 
         if (res === null || res.toLowerCase() === "y") {
-            throw new ai.Exit(cmd)
+            await new Deno.Command(cmd.command, { args: cmd.args }).spawn().status
+            throw new ai.Exit()
         } else {
             throw new ai.Feedback("the user is not happy with this command")
         }
     }
 }
 
-// Uncomment this to disable traces
-//ai.setLogLevel("quiet")
+export default ({ args }: ai.AgentArgs) => {
+    if (args[0] === undefined) {
+        console.error(`${colors.red("fix:")} you must call this with a command to fix 
 
-if (!Deno.args[0]) {
-    console.error(`${colors.red("error:")} you must call this with a command to fix (e.g. 'fix egrep')`)
-    Deno.exit(1)
+For example:
+
+    trackway run fix.ts -- egrep -e "???" MyFile.txt`)
+        Deno.exit(1)
+    } else {
+        return new Fix(args)
+    }
 }
 
-const fix = await ai.run(new Fix())
 
-const cmd = new Deno.Command(fix.command, { args: fix.args })
-await cmd.spawn().output()
+
+
 
 

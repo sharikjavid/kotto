@@ -11,7 +11,7 @@ import { Exit, Feedback, Interrupt } from "./errors.ts"
  */
 export type LogLevel = "trace" | "quiet"
 
-type Color = "red" | "magenta" | "green" | "cyan"
+type Color = "red" | "magenta" | "green" | "cyan" | "yellow"
 
 function toColorFn(color: Color): (_: string) => string {
     switch (color) {
@@ -23,6 +23,8 @@ function toColorFn(color: Color): (_: string) => string {
             return colors.green
         case "cyan":
             return colors.cyan
+        case "yellow":
+            return colors.yellow
     }
 }
 
@@ -132,5 +134,7 @@ export const logger = new Logger()
 export const eprint = (msg: string, header?: string, color?: Color) => logger.eprint(msg, header, color)
 
 export const error = (msg: string) => eprint(msg, colors.bold("error"), "red")
+
+export const warn = (msg: string) => eprint(msg, colors.bold("warning"), "yellow")
 
 export const info = (msg: string) => eprint(msg, "info")

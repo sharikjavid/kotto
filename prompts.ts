@@ -1,78 +1,39 @@
-import { parse as parsePath, join as joinPath, fromFileUrl, toFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
+import { join as joinPath, toFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
 
-import { ensureDir } from "https://deno.land/std@0.198.0/fs/mod.ts"
-
-import { doRun } from "./bootstrap.ts"
 import { RuntimeError } from "./errors.ts"
 
-export class Prompts {
-    #source_url: URL
-    #prompts?: PromptsModule
-    #ready?: Promise<void>
-    
-    constructor(url?: string) {
-        if (url === undefined) {
-            url = Deno.mainModule
-        }
-        this.#source_url = new URL(url)
+export type RunParameters = {
+    exec?: string
+    output_path?: string,
+    urls?: URL[],
+    should_prompt?: boolean
+}
+
+export function runRust(params?: RunParameters): Deno.ChildProcess {
+    const args = []
+    let stdout: "inherit" | "piped" = "inherit"
+
+    if (params?.output_path !== undefined) {
+        args.push(`-o=${params.output_path}`)
+    } else {
+        stdout = "piped"
     }
 
-    async loadPrompts(): Promise<PromptsModule> {
-        const source_url = this.#source_url
-
-        // TODO: don't use path stuff for URLs
-        const parsed_path = parsePath(source_url.pathname)
-
-        if (source_url.protocol !== "file:") {
-            // if remote module, try to get `.prompts.js` for an early win
-            const prompts_path = new URL(source_url)
-            prompts_path.pathname = `${parsed_path.dir}/${parsed_path.name}.prompts.js`
-            try {
-                return await import(prompts_path.toString())
-            }
-            catch (e) {
-                if (e instanceof TypeError && e.cause === "ERR_MODULE_NOT_FOUND") {
-                    // absorb silently, we'll build below
-                } else {
-                    throw e
-                }
-            }
-        }
-
-        const local_build_path = joinPath(Deno.cwd(), "build", "prompts")
-
-        await ensureDir(local_build_path)
-
-        const proc = await doRun({
-            urls: [source_url],
-            output_path: local_build_path
-        })
-
-        if (!(await proc?.status)?.success) {
-            throw new RuntimeError("tc exited unsuccessfully")
-        }
-
-        const output_path = toFileUrl(joinPath(local_build_path, `${parsed_path.name}.prompts.js`))
-
-        return import(output_path.toString())
+    if (params?.urls !== undefined) {
+        args.push(...params.urls.map(url => url.toString()))
     }
 
-    spawnBackgroundInit() {
-        this.#ready = this.loadPrompts().then((prompts) => {
-            this.#prompts = prompts
-        })
-    }
+    const cmd = new Deno.Command(params?.exec || "trackwayc", {
+        args,
+        stdout,
+        stderr: "inherit"
+    })
 
-    async ensureReady() {
-        if (this.#ready === undefined) {
-            this.spawnBackgroundInit()
-        }
-        await this.#ready
-    }
+    return cmd.spawn()
+}
 
-    newScope(): Scope {
-        return new Scope(this.#prompts!)
-    }
+type PromptOpts = {
+    work_dir?: string,
 }
 
 interface PromptsModule {
@@ -84,6 +45,45 @@ type PromptNode = {
     fmt: string
     id: string
     context?: string[]
+}
+
+export class Prompts {
+    readonly #mod: PromptsModule
+
+    constructor(mod: PromptsModule) {
+        this.#mod = mod
+    }
+
+    static fromModule(mod: PromptsModule): Prompts {
+        return new Prompts(mod)
+    }
+
+    static async fromUrl(url: URL, opts: PromptOpts = {}): Promise<Prompts> {
+        const output_path = opts.work_dir || Deno.cwd()
+
+        const file_name = url.pathname.split("/").pop()!
+
+        const output_name = `${file_name.split(".")[0]}.prompts.js`
+
+        const proc = runRust({
+            urls: [url],
+            output_path
+        })
+
+        if (!(await proc?.status)?.success) {
+            throw new RuntimeError(`failed to generate prompts for ${url.toString()}`)
+        }
+
+        return Prompts.fromModule(await import(joinPath(output_path, output_name)))
+    }
+
+    static async fromPath(path: string, opts: PromptOpts = {}): Promise<Prompts> {
+        return Prompts.fromUrl(toFileUrl(path), opts)
+    }
+
+    newScope(): Scope {
+        return new Scope(this.#mod)
+    }
 }
 
 export class Scope {

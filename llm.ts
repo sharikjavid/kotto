@@ -2,6 +2,10 @@ import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuratio
 
 import * as errors from "./errors.ts"
 
+export interface LLM {
+    complete(messages: ChatCompletionRequestMessage[]): Promise<string>
+}
+
 export class OpenAIChatCompletion {
     #openai: OpenAIApi
     #messages: ChatCompletionRequestMessage[] = []
@@ -11,13 +15,7 @@ export class OpenAIChatCompletion {
         return this.#messages
     }
 
-    constructor() {
-        const apiKey = Deno.env.get("OPENAI_KEY")
-
-        if (apiKey === undefined) {
-            throw new errors.RuntimeError("The `OPENAI_KEY` env variable must be set.")
-        }
-
+    constructor(apiKey: string) {
         const configuration = new Configuration({
             apiKey
         });

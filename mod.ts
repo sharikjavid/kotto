@@ -7,6 +7,10 @@ import * as llm from "./llm.ts"
 
 export { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
 
+export type AgentArgs = {
+    args: string[]
+}
+
 /**
  * Set the log level.
  */
@@ -109,31 +113,27 @@ export function isPending(exited: Exited | Pending): exited is Pending {
  *
  * You can run agents with [[run]] or [[runOnce]].
  */
-class AgentController {
+export class AgentController {
     agent: Agent
+
+    prompts: Prompts
 
     exports: ExportsMap
 
-    llm: llm.OpenAIChatCompletion
-
-    prompts: Prompts
+    llm: llm.LLM
 
     template: Template
 
     history: Action[] = []
-    prompt?: string
-    role: "user" | "system" = "user"
 
-    constructor(agent: Agent) {
+    constructor(agent: Agent, prompts: Prompts, llm: llm.LLM) {
         this.agent = agent
+
+        this.prompts = prompts
 
         this.exports = agent.exports || new ExportsMap()
 
-        this.llm = new llm.OpenAIChatCompletion()
-
-        this.prompts = new Prompts(agent.prompts)
-
-        this.prompts.spawnBackgroundInit()
+        this.llm = llm
 
         this.template = agent.template || Naive
     }
@@ -141,7 +141,10 @@ class AgentController {
     renderContext(): string {
         const scope = this.prompts.newScope()
 
-        this.exports.forEach(({ adder }) => adder(scope))
+        this.exports.forEach(({ property_key, adder }) => {
+            logger.trace(`adding '${property_key}' to scope`)
+            adder(scope)
+        })
 
         return this.template.renderContext(scope)
     }
@@ -173,8 +176,6 @@ class AgentController {
     }
 
     async tick({ prompt, role }: Pending = { role: "user" }): Promise<Exited | Pending> {
-        await this.ensureReady()
-
         try {
             await this.complete(prompt, role)
             return {
@@ -211,7 +212,7 @@ class AgentController {
 
     async complete(prompt?: string, role: "user" | "system" = "system") {
         if (prompt === undefined) {
-            if (this.llm.messages.length == 0) {
+            if (this.history.length == 0) {
                 prompt = this.renderContext()
             } else {
                 const last = this.history[this.history.length - 1]
@@ -236,10 +237,6 @@ class AgentController {
         await this.doAction({ call: response })
     }
 
-    async ensureReady() {
-        await this.prompts.ensureReady()
-    }
-
     async runToCompletion(): Promise<any> {
         let tick = undefined
         while (true) {
@@ -247,26 +244,6 @@ class AgentController {
             if (isExited(tick)) {
                 return tick.output
             }
-            logger.trace()
         }
     }
-}
-
-/**
- * Run an agent to completion.
- * @param agent
- */
-export function run(agent: any): Promise<any> {
-    // TODO check agent has the interface
-    return (new AgentController(agent)).runToCompletion()
-}
-
-/**
- * Run an agent once.
- * @param agent
- */
-export async function runOnce(agent: any): Promise<Exited | Pending> {
-    // TODO check agent has the interface
-    const ctl = new AgentController(agent)
-    return await ctl.tick()
 }

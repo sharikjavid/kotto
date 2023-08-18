@@ -1,6 +1,6 @@
-import ai from "../mod.ts"
+import * as ai from "../mod.ts"
 
-class HelloWorld {
+export class HelloWorld {
     /**
      * Cheer me up!
      * 
@@ -8,9 +8,9 @@ class HelloWorld {
      */
     @ai.use
     cheer(message: string) {
+        console.log(message)
         throw new ai.Exit(message)
     }
 }
 
-console.log(await ai.run(new HelloWorld()))
-// prints: "Keep up the good work!"
+export default () => new HelloWorld()

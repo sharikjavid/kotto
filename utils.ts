@@ -4,6 +4,7 @@ import * as fs from "https://deno.land/std@0.198.0/fs/mod.ts"
 import { grantOrThrow } from "https://deno.land/std@0.198.0/permissions/mod.ts"
 
 import { error, info } from "./log.ts"
+import { runRust, type RunParameters } from "./prompts.ts"
 
 const TRACKWAY_REPO = "ssh://git@github.com/brokad/trackway"
 
@@ -72,7 +73,7 @@ async function donwloadLatestRelease() {
     await Deno.chmod(bin_target_path, 0o755)
 }
 
-async function runCargoInstall() {
+export async function runCargoInstall() {
     try {
         const cmd = new Deno.Command("cargo", {
             args: ["install", "--bin=trackwayc", `--git=${TRACKWAY_REPO}.git`]
@@ -106,36 +107,6 @@ async function doBootstrap() {
     }
 }
 
-type RunParameters = {
-    exec?: string
-    output_path?: string,
-    urls?: URL[],
-    should_prompt?: boolean
-}
-
-export function doRun(params?: RunParameters): Deno.ChildProcess {
-    let args = []
-    let stdout: "inherit" | "piped" = "inherit"
-
-    if (params?.output_path !== undefined) {
-        args.push(`-o=${params.output_path}`)
-    } else {
-        stdout = "piped"
-    }
-
-    if (params?.urls !== undefined) {
-        args.push(...params.urls.map(url => url.toString()))
-    }
-
-    const cmd = new Deno.Command(params?.exec || "trackwayc", {
-        args,
-        stdout,
-        stderr: "inherit"
-    })
-
-    return cmd.spawn()
-}
-
 async function ensurePermissionsToRun(params?: RunParameters) {
     const permissions: Deno.PermissionDescriptor[] = [{
         name: "run",
@@ -143,6 +114,9 @@ async function ensurePermissionsToRun(params?: RunParameters) {
     }, {
         name: "net",
         host: "api.openai.com"
+    }, {
+        name: "net",
+        host: "trackway.ai"
     }, {
         name: "read",
         path: "./"
@@ -180,7 +154,7 @@ async function isAvailable(params?: RunParameters): Promise<boolean> {
     let child
 
     try {
-        child = doRun({ exec: params?.exec })
+        child = runRust({ exec: params?.exec })
     } catch (e) {
         if (e instanceof Deno.errors.NotFound) {
             return false
@@ -190,8 +164,4 @@ async function isAvailable(params?: RunParameters): Promise<boolean> {
     }
 
     return child?.status?.then((status) => status.success) || false
-}
-
-if (await havePermissionsToRun() && !await isAvailable()) {
-    await doBootstrap()
 }
