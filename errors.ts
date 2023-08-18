@@ -1,4 +1,6 @@
 export class RuntimeError extends Error {
+    context?: Error
+
     constructor(message: string) {
         super(message)
         this.name = "RuntimeError"

@@ -63,14 +63,14 @@ class LLM {
         return resp_msg
     }
 
-    async call(messages: ChatCompletionRequestMessage[]): Promise<FunctionCall> {
+    async complete(messages: ChatCompletionRequestMessage[]): Promise<string> {
         const resp = await this.send(messages)
 
         if (resp.content === undefined) {
             throw new RuntimeError("Completion has empty content")
         }
         
-        return JSON.parse(resp.content)
+        return resp.content
     }
 }
 
@@ -131,6 +131,23 @@ export interface Agent {
     [functions: string]: any;
 }
 
+type Exited = {
+    output: any
+}
+
+function isExited(pending: Exited | Pending): pending is Exited {
+    return "output" in pending
+}
+
+type Pending = {
+    role: "user" | "system"
+    prompt?: string
+}
+
+function isPending(exited: Exited | Pending): exited is Pending {
+    return "prompt" in exited
+}
+
 export class AgentController {
     agent: Agent
 
@@ -143,6 +160,8 @@ export class AgentController {
     template: Template
 
     history: Action[] = []
+    prompt?: string
+    role: "user" | "system" = "user"
 
     constructor(agent: Agent) {
         this.agent = agent
@@ -192,11 +211,44 @@ export class AgentController {
         return
     }
 
-    async doNext(prompt?: string, role?: "user" | "system") {
-        if (this.agent.is_done) {
-            throw new Error("agent is done")
-        }
+    async tick({ prompt, role }: Pending = { role: "user" }): Promise<Exited | Pending> {
+        await this.ensureReady()
 
+        try {
+            await this.complete(prompt, role)
+            return {
+                role: "user"
+            }
+        }
+        catch (err) {
+            // TODO backoff
+            if (err instanceof Feedback) {
+                logger.feedback(err)
+                return {
+                    prompt: err.message,
+                    role: "system"
+                }
+            } else if (err instanceof Interrupt) {
+                logger.interrupt(err)
+                throw err.value
+            } else if (err instanceof RuntimeError) {
+                throw err
+            } else if (err instanceof Exit) {
+                logger.exit(err)
+                return {
+                    output: err.value
+                }
+            } else {
+                logger.error(err)
+                return {
+                    role: "system",
+                    prompt: this.template.renderError(err)
+                }
+            }
+        }
+    }
+
+    async complete(prompt?: string, role: "user" | "system" = "system") {
         if (prompt === undefined) {
             if (this.llm.messages.length == 0) {
                 prompt = this.renderContext()
@@ -206,62 +258,56 @@ export class AgentController {
             }
         }
 
-        if (role === undefined) {
-            role = "system"
-        }
-
-        const response = await this.llm.call([{
+        const completion = await this.llm.complete([{
             "role": role,
             "content": prompt
         }])
+
+        let response
+        try {
+            response = this.template.parseResponse(completion)
+        } catch (_) {
+            throw new Feedback(`could not extract JSON from your response: ${completion}`)
+        }
 
         logger.thought(response.reasoning || "(no reasoning given)")
 
         await this.doAction({ call: response })
     }
 
-    async runToCompletion(): Promise<any> {
+    async ensureReady() {
         await this.prompts.ensureReady()
+    }
 
-        let prompt: string | undefined
-        
-        let role: "user" | "system" = "user"
-
+    async runToCompletion(): Promise<any> {
+        let tick = undefined
         while (true) {
-            try {
-                await this.doNext(prompt, role)
-                prompt = undefined
-                role = "user"
+            tick = await this.tick(tick)
+            if (isExited(tick)) {
+                return tick.output
             }
-            catch (err) {
-                // TODO backoff
-                if (err instanceof Feedback) {
-                    logger.feedback(err)
-                    prompt = err.message
-                    role = "system"
-                } else if (err instanceof Interrupt) {
-                    logger.interrupt(err)
-                    throw err.value
-                } else if (err instanceof RuntimeError) {
-                    throw err
-                } else if (err instanceof Exit) {
-                    logger.exit(err)
-                    return err.value
-                } else {
-                    logger.error(err)
-                    prompt = this.template.renderError(err)
-                    role = "system"
-                }
-            }
-
             logger.trace()
         }
     }
 }
 
+/**
+ * Run an agent to completion.
+ * @param agent
+ */
 function run(agent: any): Promise<any> {
     // TODO check agent has the interface
     return (new AgentController(agent)).runToCompletion()
+}
+
+/**
+ * Run an agent once.
+ * @param agent
+ */
+async function call(agent: any): Promise<Exited | Pending> {
+    // TODO check agent has the interface
+    const ctl = new AgentController(agent)
+    return await ctl.tick()
 }
 
 export default {
@@ -274,5 +320,6 @@ export default {
     Exit,
     setLogLevel,
     getLogLevel,
-    run
+    run,
+    runOnce: call
 }

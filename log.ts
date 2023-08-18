@@ -3,7 +3,7 @@ import { unicodeWidth } from "https://deno.land/std@0.198.0/console/mod.ts";
 
 import { Exit, Feedback, Interrupt } from "./errors.ts"
 
-export type LogLevel = "trace" | "quiet" | undefined
+export type LogLevel = "trace" | "quiet"
 
 type Color = "red" | "magenta" | "green" | "cyan"
 
@@ -29,21 +29,20 @@ export function getLogLevel(): LogLevel {
 }
 
 class Logger {
-    stringified_max_length: number = 76
-    header_width: number = 5
-    log_level: LogLevel = "trace"
+    stringified_max_length = 76
+    header_width = 5
+    log_level: LogLevel = "quiet"
 
     toLogLevelNum(): number {
         switch (this.log_level) {
             case "trace":
                 return 0
             case "quiet":
-            case undefined:
                 return 1
         }
     }
     
-    trace(header: string = "", message: string = "") {
+    trace(header = "", message = "") {
         const width = unicodeWidth(colors.stripColor(header))
         const pad = this.header_width - width
         header = ' '.repeat(pad >= 0 ? pad : 0) + header
@@ -102,7 +101,7 @@ class Logger {
         this.trace(colors.gray("╭"), colors.gray(msg))
     }
     
-    eprint(msg?: string, header: string = "trackway", color: Color = "cyan") {
+    eprint(msg?: string, header = "trackway", color: Color = "cyan") {
         if (color == undefined)
             color = "cyan"
 
