@@ -1,14 +1,11 @@
-import * as flags from "https://deno.land/std@0.198.0/flags/mod.ts";
-import { dirname, join, toFileUrl, resolve } from "https://deno.land/std@0.198.0/path/mod.ts"
-import { ensureDir } from "https://deno.land/std@0.198.0/fs/mod.ts";
-import * as toml from "https://deno.land/std@0.198.0/toml/mod.ts";
+import { toml, flags, toFileUrl, resolve, ensureDir, join, dirname } from "./deps.ts"
 
 import { Prompts } from "./prompts.ts";
 import { RuntimeError } from "./errors.ts";
 import { AgentController } from "./mod.ts"
-import * as log from "./log.ts"
 import { OpenAIChatCompletion } from "./llm.ts"
 import { runCargoInstall } from "./utils.ts"
+import * as log from "./log.ts"
 
 const SEMVER = "0.1.0"
 
@@ -139,7 +136,7 @@ type RunFlags = {
     openai_key: string
 }
 
-async function doRun(args: RunFlags) {
+export async function doRun(args: RunFlags): Promise<any> {
     log.setLogLevel(args.trace ? "trace" : "quiet")
 
     if (args.allow_exit === true) {
@@ -188,7 +185,7 @@ try adding:
 
     const ctl = new AgentController(agent, prompts, llm)
 
-    await ctl.runToCompletion()
+    return await ctl.runToCompletion()
 }
 
 type Config = {
