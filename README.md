@@ -20,7 +20,7 @@ prompts to help you build the most natural interfaces with language models.
 <br/>
 
 <p align="center">
-  <a href="./examples/hello-world.ts"><img src="./resources/hello-im-js.png" width="700"/></a>
+  <a href="examples/hello.ts"><img src="./resources/hello-im-js.png" width="700"/></a>
 </p>
 
 <br/>
@@ -184,7 +184,7 @@ Now that you got a sense for how Trackway works, check out the examples below an
 Since the type system is used to generate prompts, you can use the underlying LLM to extract data from real-world noisy
 text data.
 
-For example, [`extract.ts`](./examples/extract.ts) takes a string argument and extracts some info from it:
+For example, [extract.ts](./examples/extract.ts) takes a string argument and extracts some info from it:
 
 ```bash
 trackway run https://trackway.ai/examples/extract.ts -- "I am 25 years old and I live in Paris"
@@ -192,20 +192,26 @@ trackway run https://trackway.ai/examples/extract.ts -- "I am 25 years old and I
 
 ### Chatbots
 
-TODO
+You can use Trackway to build interactive chatbots that can leverage Deno's ecosystem of libraries to pack awesome functionality into your agents.
+
+To get you started, take a look at [chat.ts](./examples/chat.ts):
+
+```bash
+trackway run https://trackway.ai/examples/chat.ts
+```
 
 ### Automate stuff
 
 You can use Trackway to script agents that automate things for you.
 
-For example, [`fix.ts`](./examples/fix.ts) is a small utility that will take a command and help you with getting what
+For example, [fix.ts](./examples/fix.ts) is a small utility that will take a command and help you with getting what
 you want with it:
 
 ```bash
 trackway run https://trackway.ai/examples/fix.ts -- egrep -e "???" MyFile.txt 
 ```
 
-Another example is [`summarise.ts`](./examples/summarise.ts), which will take a GitHub repository, pull its README.md
+Another example is [summarise.ts](./examples/summarise.ts), which will take a GitHub repository, pull its README.md
 and summarise it with the info you want:
 
 ```bash
