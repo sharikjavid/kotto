@@ -35,7 +35,7 @@ impl FilteredModule {
         let mut to_visit: Vec<TypeRef> = refs.into_iter().cloned().collect();
         while let Some(next) = to_visit.pop() {
             if let Some(next_id) = next.type_name.clone().ident().as_ref().map(ast::Ident::to_id) {
-                if !closure.insert(next_id.clone()) {
+                if closure.insert(next_id.clone()) {
                     if let Some(next_decl) = self.type_alias_decls.get(&next_id) {
                         TypeRefVisitor(&mut to_visit).visit_ts_type_alias_decl(next_decl);
                     }

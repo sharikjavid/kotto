@@ -1,6 +1,4 @@
-import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
-import { unicodeWidth } from "https://deno.land/std@0.198.0/console/mod.ts";
-
+import { colors, unicodeWidth } from "./deps.ts"
 import { Exit, Feedback, Interrupt } from "./errors.ts"
 
 /**

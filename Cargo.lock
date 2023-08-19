@@ -2004,25 +2004,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "atty",
- "clap",
- "colored",
- "deno_ast",
- "home",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "tempfile"
 version = "3.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2189,6 +2170,25 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "trackwayc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atty",
+ "clap",
+ "colored",
+ "deno_ast",
+ "home",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
 ]
 
 [[package]]

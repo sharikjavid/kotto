@@ -7,8 +7,8 @@ import * as llm from "./llm.ts"
 
 export { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
 
-export type AgentArgs = {
-    args: string[]
+export type AgentOptions = {
+    argv: string[]
 }
 
 /**

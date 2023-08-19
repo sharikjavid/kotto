@@ -77,8 +77,8 @@ class Fix {
     }
 }
 
-export default ({ args }: ai.AgentArgs) => {
-    if (args[0] === undefined) {
+export default ({ argv }: ai.AgentOptions) => {
+    if (argv[0] === undefined) {
         console.error(`${colors.red("fix:")} you must call this with a command to fix 
 
 For example:
@@ -86,7 +86,7 @@ For example:
     trackway run fix.ts -- egrep -e "???" MyFile.txt`)
         Deno.exit(1)
     } else {
-        return new Fix(args)
+        return new Fix(argv)
     }
 }
 

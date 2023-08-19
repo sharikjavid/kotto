@@ -38,7 +38,8 @@ export class OpenAIChatCompletion {
         try {
             resp = await this.#openai.createChatCompletion(req)
         } catch (err) {
-            throw new errors.Interrupt(err)
+            const data = await err.json()
+            throw new errors.RuntimeError(`openai: ${data.error.message}`)
         }
 
         const resp_msg = resp.data.choices[0].message

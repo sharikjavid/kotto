@@ -33,20 +33,22 @@ prompts to help you build the most natural interfaces with language models.
 - [Getting Started](#runner-getting-started)
     - [Installation](#installation)
     - [Hello, world!](#hello-im-a-javascript-runtime)
-    - [Types are context](#types-are-context)
-- [Examples](#examples)
-    - [Hello, World!](./examples/hello-world.ts)
-    - [Hello, World! (interactive)](./examples/hello-world-interactive.ts)
-    - [Extracting information](./examples/extract-feedback.ts)
-- [Documentation](#documentation)
-    - [Imports](#imports)
+    - [Type is context](#type-is-context)
+- [Examples](#rocket-examples)
+    - [Data from text](#data-from-text)
+    - [Chatbots](#chatbots)
+    - [Automate stuff](#automate-stuff)
+- [Documentation](#books-documentation)
     - [Building agents](#building-agents)
-    - [@prompts](#prompts)
-    - [@use](#use)
-    - [call: calling one function](#call-calling-one-function)
-    - [Exceptions](#exceptions)
+        - [Imports](#imports)
+        - [Classes](#classes)
+        - [Exports](#exports)
+    - [Event loop](#event-loop)
+        - [`Exit`](#aiexit)
+        - [`Interrupt`](#aiinterrupt)
+        - [`Feedback`](#aifeedback)
+        - [Any other exception](#any-other-exception)
 - [FAQ](#faq)
-- [Roadmap](#roadmap)
 - [Contributing](#contributing)
 
 ## :runner: Getting Started
@@ -68,23 +70,12 @@ trackway config openai.key MY_SECRET_KEY
 and run your first example
 
 ```bash
-trackway run https://trackway.ai/hello.ts
+trackway run https://trackway.ai/examples/hello.ts
 ```
 
 ### Hello, I'm a JavaScript runtime.
 
 Create a file `hello.ts` and lay down the skeleton of a class:
-
-```typescript
-class Hello {
-    introduction(message: string) {
-        console.log(`introduction: ${message}`)
-    }
-}
-```
-
-**We're going to ask an LLM to call this function with a nice introduction message**. Add the following import and
-decorate the `introduction` function with `@ai.use`:
 
 ```typescript
 import * as ai from "https://trackway.ai/mod.ts"
@@ -101,10 +92,9 @@ class Hello {
 export default () => new Hello()
 ```
 
-We've added a `throw` statement so that the runtime interrupts its event loop after the first call to `Hello.hello`.
-We've also added a default export, so it knows how to instantiate our agent.
+Note the `@ai.use` decorator: this is the key to exposing the hello method to the LLM backend.
 
-Now run the script:
+Now run the agent:
 
 ```bash
 $ trackway run hello.ts
@@ -124,7 +114,7 @@ trackway run --trace hello.ts
 This will display a trace log of actions taken by the LLM. Like many other tools, Trackway asks the LLM backend to
 justify the reasoning behind an action choice - and that reasoning is displayed in dimmed text above each action.
 
-### Types are context
+### Type is context
 
 Because the LLM knows the type signature of the `hello` function, we can use the type system to our advantage. Let's
 change the example a bit:
@@ -187,19 +177,42 @@ I am feeling happy today, because I am excited to learn about Trackway!
 
 Now that you got a sense for how Trackway works, check out the examples below and start building your own!
 
-## Examples
+## :rocket: Examples
 
 ### Data from text
 
-### Chat bots
+Since the type system is used to generate prompts, you can use the underlying LLM to extract data from real-world noisy
+text data.
 
-### CLI tools
+For example, [`extract.ts`](./examples/extract.ts) takes a string argument and extracts some info from it:
 
-[`fix`](./examples/fix.ts) is a small utility in [77 lines of code](./examples/fix.ts) (and a lot of it are comments)
-that will take a command
-you feed it and help you with getting what you want.
+```bash
+trackway run https://trackway.ai/examples/extract.ts -- "I am 25 years old and I live in Paris"
+```
 
-## Documentation
+### Chatbots
+
+TODO
+
+### Automate stuff
+
+You can use Trackway to script agents that automate things for you.
+
+For example, [`fix.ts`](./examples/fix.ts) is a small utility that will take a command and help you with getting what
+you want with it:
+
+```bash
+trackway run https://trackway.ai/examples/fix.ts -- egrep -e "???" MyFile.txt 
+```
+
+Another example is [`summarise.ts`](./examples/summarise.ts), which will take a GitHub repository, pull its README.md
+and summarise it with the info you want:
+
+```bash
+trackway run https://trackway.ai/examples/summarise.ts -- brokad/trackway
+```
+
+## :books: Documentation
 
 ### Building agents
 
@@ -251,7 +264,7 @@ export default ({argv}: AgentOptions) => {
 }
 ```
 
-### Exceptions
+### Event loop
 
 When you run an agent with `trackway run`, the runtime will enter an event loop. It will keep bouncing back and forth
 between your agent and the LLM backend. In other words: your class goes on autopilot.
@@ -313,20 +326,6 @@ that exception will be repackaged as a system message and sent back to the LLM.
 
 ## FAQ
 
-### What is this? And what is it *not*?
-
-Trackway aims to be a pure prompt-generation and runtime interface that parses, filters and processes code to
-create a
-LLM-friendly runtime.
-
-This means the starting and end points are always code. In this project, prompt engineering is closer to a code
-generation task: something you can customise and adjust procedurally (like any meta-programming framework), but not
-something you'd do manually.
-
-If you need something that is low-level where prompts are crafted through raw string concatenation or interpolation, you
-might want to
-look at [LangChain] or [LlamaIndex] instead. Trackway is a project closer to something like [marvin].
-
 ### How safe is it?
 
 Trackway lets an LLM decide what action to take next. And since LLMs are large and complicated models, it is difficult
@@ -339,8 +338,9 @@ with the LLM,
 asking it for data and returning it data. So the model is unable to have side effects that you didn't expose through the
 content of your own code.
 
-Another backstop is that *only* methods that are explicitly tagged with the [@use annotation](#use) are exposed to the
-LLM. Therefore only those methods are known to the model. Even the method's body is hidden from the model! So it only
+Another backstop is that *only* methods that are explicitly tagged with the [@use](#building-agents) annotation are
+exposed to the
+LLM. Therefore, only those methods are known to the model. Even the method's body is hidden from the model! So it only
 knows of the public interface: the method name, its documentation, the method's arguments, the type declarations of
 those arguments, etc. Basically it knows what you would otherwise know reading through a documentation page.
 

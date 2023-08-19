@@ -31,9 +31,7 @@ Usage: trackway [OPTIONS] [COMMAND]
 
 Commands:
   run          Run an agent
-  debug        Run an agent in debug mode
   config       Set configuration options
-  deploy       Deploy an agent (coming soon)
   upgrade      Upgrade trackway
   help         Show this help message
   
@@ -48,10 +46,11 @@ To run an agent:
 
     trackway run https://trackway.ai/agents/hello.ts
 
-Usage: trackway run [OPTIONS] PATH
+Usage: trackway run [OPTIONS] PATH [--] [ARGS...]
 
 Arguments:
     PATH         Path to the agent to run
+    ARGS...      Arguments to pass to the agent
 
 Options:
     --trace      Enable trace logging
@@ -177,7 +176,7 @@ try adding:
   export default () => new MyAgent()`)
     }
 
-    const agent = mod.default({ args: getUserArgs() })
+    const agent = await mod.default({ argv: getUserArgs() })
 
     const prompts = await Prompts.fromUrl(url, {
         work_dir: temp_dir
