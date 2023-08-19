@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 deno \
   install \
-  --allow-read="." \
-  --allow-read="~/.config/trackway" \
-  --allow-write="." \
-  --allow-write="~/.config/trackway" \
-  --allow-env="OPENAI_KEY" \
-  --allow-net="api.openai.com" \
-  --allow-net="trackway.ai" \
-  --allow-run="trackwayc" \
+  -A \
   --name="trackway" \
   https://trackway.ai/cli.ts
+
+export PATH="$HOME/.deno/bin:$PATH"
 
 trackway upgrade
 

@@ -3,7 +3,7 @@
 </div>
 
 <p align="center">
-  <img src="resources/logo.svg" width="420" alt="trackway-logo">
+  <img src="https://trackway.ai/static/logo.png" width="360" alt="trackway-logo">
 </p>
 
 <h2 align="center">
@@ -20,7 +20,7 @@ prompts to help you build the most natural interfaces with language models.
 <br/>
 
 <p align="center">
-  <a href="examples/hello.ts"><img src="./resources/hello-im-js.png" width="700"/></a>
+  <a href="examples/hello.ts"><img src="https://trackway.ai/static/hello-im-js.png" width="700"/></a>
 </p>
 
 <br/>
@@ -92,7 +92,8 @@ class Hello {
 export default () => new Hello()
 ```
 
-Note the `@ai.use` decorator: this is the key to exposing the hello method to the LLM backend.
+Note the `@ai.use` decorator and the comment: this is the key to exposing the hello method to the LLM backend and
+explaining what we want to happen.
 
 Now run the agent:
 
@@ -192,7 +193,8 @@ trackway run https://trackway.ai/examples/extract.ts -- "I am 25 years old and I
 
 ### Chatbots
 
-You can use Trackway to build interactive chatbots that can leverage Deno's ecosystem of libraries to pack awesome functionality into your agents.
+You can use Trackway to build interactive chatbots that can leverage Deno's ecosystem of libraries to pack awesome
+functionality into your agents.
 
 To get you started, take a look at [chat.ts](./examples/chat.ts):
 
