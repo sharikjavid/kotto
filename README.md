@@ -1,20 +1,11 @@
-<div align="center">
-
-</div>
-
-<p align="center">
-  <img src="https://trackway.ai/static/logo.png" width="360" alt="trackway-logo">
-</p>
-
-<h2 align="center">
-  Let your code chat with LLMs
-</h2>
+<h1 align="center">
+  Trackway
+</h1>
 
 <br/>
 
 <p align="center">
-<b>Trackway is a framework that lets LLMs understand how to use your code.</b> It statically generates context-efficient
-prompts to help you build the most natural interfaces with language models.
+<b>A TypeScript framework that lets LLMs know how to use your code.</b>
 </p>
 
 <br/>
@@ -26,7 +17,7 @@ prompts to help you build the most natural interfaces with language models.
 <br/>
 
 > [!WARNING]
-> Trackway is a very early stage project. Expect APIs to change and features to break as we make our way to 1.0.
+> Trackway is a very early stage project. Expect features and APIs to break frequently.
 
 <br/>
 
@@ -103,10 +94,10 @@ Hello, I am a JavaScript runtime.
 ```
 
 Under the hood, Trackway has statically generated a prompt set that includes the type signature of the `hello`
-function. It then sends sections of that prompt set to the LLM, which uses it to generate a completion that will call
+function as well as the comment above it. The model then predicts that it needs to call 
 the function with the argument `"Hello, I'm a JavaScript program."`.
 
-We can get a bit more insight into which function was called, and for what reason, by tuning up the log level:
+We can get a bit more insight into what's going on by tuning up the log level:
 
 ```bash
 trackway run --trace hello.ts
@@ -176,7 +167,7 @@ I am feeling happy today, because I am excited to learn about Trackway!
 
 ### Great! What now?
 
-Now that you got a sense for how Trackway works, check out the examples below and start building your own!
+Now that you got a sense for how Trackway works, check out the examples below and start building!
 
 ## :rocket: Examples
 
@@ -241,7 +232,7 @@ import * as ai from "https://trackway.ai/@0.1.0/mod.ts"
 
 #### Classes
 
-Any class can become an agent. Just make sure you decorate at least one of its methods with `@ai.use`:
+Any class can become an agent. Just make sure you decorate at least one of its methods with `@use`:
 
 ```typescript
 class MyAgent {
@@ -253,7 +244,9 @@ class MyAgent {
 ```
 
 > [!IMPORTANT]
-> The LLM backend does not know of any other method than the ones you decorate with `@ai.use`.
+> The LLM backend does not know of any other method than the ones you decorate with `@use`.
+
+When a method is decorated with `@use`, its type signature and its JSDoc/comments (if there are any) are added to the prompt set. However, the method's body is kept hidden.
 
 #### Exports
 
