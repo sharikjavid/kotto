@@ -5,9 +5,9 @@
  * asks it for help with making it work.
  *
  * For example:
- *     `deno run -A https://damien.sh/trackway/examples/fix.ts tar MyFile.tar.gz`
+ *     `trackway run https://trackway.ai/examples/fix.ts -- tar MyFile.tar.gz`
  * or
- *     `deno run -A https://damien.sh/trackway/examples/fix.ts grep -e "???" MyFile.txt`
+ *     `trackway run https://trackway.ai/examples/fix.ts -- grep -e "???" MyFile.txt`
  * and when it asks, tell it something like:
  *     `grep all IP addresses in file`
  */
@@ -69,7 +69,7 @@ class Fix {
             + colors.dim("\`, is that ok? (Y/n)"))
 
         if (res === null || res.toLowerCase() === "y") {
-            await new Deno.Command(cmd.command, { args: cmd.args }).spawn().status
+            await new Deno.Command(cmd.command, {args: cmd.args}).spawn().status
             throw new ai.Exit()
         } else {
             throw new ai.Feedback("the user is not happy with this command")
@@ -77,13 +77,13 @@ class Fix {
     }
 }
 
-export default ({ argv }: ai.AgentOptions) => {
+export default ({argv}: ai.AgentOptions) => {
     if (argv[0] === undefined) {
         console.error(`${colors.red("fix:")} you must call this with a command to fix 
 
 For example:
 
-    trackway run fix.ts -- egrep -e "???" MyFile.txt`)
+    trackway run https://trackway.ai/examples/fix.ts -- egrep -e "???" MyFile.txt`)
         Deno.exit(1)
     } else {
         return new Fix(argv)
