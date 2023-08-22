@@ -1,4 +1,4 @@
-import * as ai from "../mod.ts"
+import * as kotto from "../mod.ts"
 
 class HelloWorld {
     /**
@@ -7,7 +7,7 @@ class HelloWorld {
      * @param {string} query A message sent to the user
      * @returns {string} What the user replied
      */
-    @ai.use
+    @kotto.use
     ask(query: string): string {
         return prompt(query)!
     }
@@ -17,10 +17,10 @@ class HelloWorld {
      *
      * @param {string} hello "Hello, world!" translated in the language the user requested.
      */
-    @ai.use
+    @kotto.use
     end(hello: string) {
         console.log(hello)
-        throw new ai.Exit(hello)
+        throw new kotto.Exit(hello)
     }
 
     /**
@@ -30,9 +30,9 @@ class HelloWorld {
      *
      * @param {string} reason A reason why the conversation was ended early.
      */
-    @ai.use
+    @kotto.use
     unable(reason: string) {
-        throw new ai.Interrupt(reason)
+        throw new kotto.Interrupt(reason)
     }
 }
 

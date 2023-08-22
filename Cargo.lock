@@ -771,6 +771,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "kottoc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atty",
+ "clap",
+ "colored",
+ "deno_ast",
+ "home",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2170,25 +2189,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "trackwayc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "atty",
- "clap",
- "colored",
- "deno_ast",
- "home",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
 ]
 
 [[package]]

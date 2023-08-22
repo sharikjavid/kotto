@@ -23,7 +23,7 @@ export function runRust(params?: RunParameters): Deno.ChildProcess {
         args.push(...params.urls.map(url => url.toString()))
     }
 
-    const cmd = new Deno.Command(params?.exec || "trackwayc", {
+    const cmd = new Deno.Command(params?.exec || "kottoc", {
         args,
         stdout,
         stderr: "inherit"

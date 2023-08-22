@@ -11,28 +11,29 @@ const SEMVER = "0.1.0"
 
 const HELP = `Let your code chat with LLMs
 
-Docs: https://trackway.ai/docs
-Tutorial: https://github.com/brokad/trackway#tutorial
-Bugs: https://github.com/brokad/trackway/issues
+Docs: https://kotto.land/docs
+Tutorial: https://github.com/brokad/kotto#tutorial
+Bugs: https://github.com/brokad/kotto/issues
 
 To run an agent:
 
-  trackway run https://trackway.ai/agents/hello.ts
+  kotto run https://kotto.land/examples/hello.ts
   
 To run an agent in debug mode:
 
-  trackway debug https://trackway.ai/agents/hello.ts
+  kotto debug https://kotto.land/examples/hello.ts
   
 To set OpenAI key:
 
-  trackway config openai.key KEY
+  kotto config openai.key KEY
 
-Usage: trackway [OPTIONS] [COMMAND]
+Usage: kotto [OPTIONS] [COMMAND]
 
 Commands:
   run          Run an agent
+  debug        Run an agent in debug mode
   config       Set configuration options
-  upgrade      Upgrade trackway
+  upgrade      Upgrade kotto
   help         Show this help message
   
 Options:
@@ -44,9 +45,9 @@ const HELP_RUN = `Run an agent
 
 To run an agent:
 
-    trackway run https://trackway.ai/agents/hello.ts
+    kotto run https://kotto.land/agents/hello.ts
 
-Usage: trackway run [OPTIONS] PATH [--] [ARGS...]
+Usage: kotto run [OPTIONS] PATH [--] [ARGS...]
 
 Arguments:
     PATH         Path to the agent to run
@@ -61,9 +62,9 @@ const HELP_DEBUG = `Run an agent in debug mode
 
 To run an agent in debug mode:
 
-    trackway debug https://trackway.ai/agents/hello.ts
+    kotto debug https://kotto.land/agents/hello.ts
 
-Usage: trackway debug [OPTIONS] PATH
+Usage: kotto debug [OPTIONS] PATH
 
 Arguments:
     PATH         Path to the agent to run
@@ -76,25 +77,25 @@ const HELP_CONFIG = `Set configuration options
 
 To set OpenAI key:
 
-    trackway config openai.key KEY
+    kotto config openai.key KEY
 
-Usage: trackway config ATTR VALUE
+Usage: kotto config ATTR VALUE
 
 Arguments:
     ATTR         The configuration attribute to set (e.g. openai.key)
     VALUE        The value to set the configuration attribute to
 `
 
-const HELP_UPGRADE = `Upgrade trackway
+const HELP_UPGRADE = `Upgrade kotto
     
-To upgrade trackway to the latest version:
+To upgrade kotto to the latest version:
 
-    trackway upgrade
+    kotto upgrade
     
-Usage: trackway upgrade
+Usage: kotto upgrade
 `
 
-const HELP_VERSION = `trackway ${SEMVER}`
+const HELP_VERSION = `kotto ${SEMVER}`
 
 function getUserArgs(): string[] {
     const user_args = Deno.args.findIndex(arg => arg == "--")
@@ -150,13 +151,13 @@ export async function doRun(args: RunFlags): Promise<any> {
 
 try running:
 
-    trackway config openai.key KEY`)
+    kotto config openai.key KEY`)
     }
 
     const llm = new OpenAIChatCompletion(openai_key)
 
     const temp_dir = await Deno.makeTempDir({
-        prefix: "trackway-"
+        prefix: "kotto-"
     })
 
     let url
@@ -203,7 +204,7 @@ const configValidator = {
     }
 }
 
-const getConfigPath = () => join(Deno.env.get("HOME")!, ".config", "trackway", "config.toml")
+const getConfigPath = () => join(Deno.env.get("HOME")!, ".config", "kotto", "config.toml")
 
 async function getConfig(): Promise<Config> {
     const config_path = getConfigPath()
@@ -243,10 +244,10 @@ async function config(attr: string, value: string) {
 }
 
 async function upgrade() {
-    log.info("installing trackway...")
+    log.info("installing kotto...")
     // TODO upgrade this cli too
     await runCargoInstall()
-    log.info("trackway is installed 🎉")
+    log.info("kotto is installed 🎉")
 }
 
 interface ErrorExt extends Error {
@@ -308,9 +309,6 @@ async function main() {
             break
         case "upgrade":
             await upgrade()
-            break
-        case "deploy":
-            log.info("deploy is coming soon! 🚀")
             break
         default:
             throw new RuntimeError(`unknown command '${command}'\n${renderHelp()}`)

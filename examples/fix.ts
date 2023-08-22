@@ -5,14 +5,14 @@
  * asks it for help with making it work.
  *
  * For example:
- *     `trackway run https://trackway.ai/examples/fix.ts -- tar MyFile.tar.gz`
+ *     `kotto run https://kotto.land/examples/fix.ts -- tar MyFile.tar.gz`
  * or
- *     `trackway run https://trackway.ai/examples/fix.ts -- grep -e "???" MyFile.txt`
+ *     `kotto run https://kotto.land/examples/fix.ts -- grep -e "???" MyFile.txt`
  * and when it asks, tell it something like:
  *     `grep all IP addresses in file`
  */
 
-import * as ai from "../mod.ts"
+import * as kotto from "../mod.ts"
 
 import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
 
@@ -35,7 +35,7 @@ class Fix {
     //
     // The user is facing an issue with this command. You should ask the user
     // what issue they're facing with the `ask` function.
-    @ai.use
+    @kotto.use
     getCommand(): Command {
         return this.cmd
     }
@@ -46,7 +46,7 @@ class Fix {
     // Keep the question short.
     //
     // Returns: the user's response.
-    @ai.use
+    @kotto.use
     ask(question: string): string {
         return prompt(colors.dim(question))!
     }
@@ -55,35 +55,35 @@ class Fix {
     //
     // Once the user's problem is solved, this can be called with the
     // improved command.
-    @ai.use
+    @kotto.use
     async returnImprovedCommand(cmd: Command) {
         if (cmd === undefined)
-            throw new ai.Feedback("you must provide a `cmd` argument")
+            throw new kotto.Feedback("you must provide a `cmd` argument")
         else if (cmd.command != this.cmd.command)
-            throw new ai.Feedback("your command must be the same as the user's command")
+            throw new kotto.Feedback("your command must be the same as the user's command")
 
         const flat = [cmd.command, ...cmd.args].join(" ")
 
         const res = prompt(colors.dim("llm thinks you want \`")
             + flat
-            + colors.dim("\`, is that ok? (Y/n)"))
+            + colors.dim("\`, is that ok? (we'll run it) (Y/n)"))
 
         if (res === null || res.toLowerCase() === "y") {
             await new Deno.Command(cmd.command, {args: cmd.args}).spawn().status
-            throw new ai.Exit()
+            throw new kotto.Exit()
         } else {
-            throw new ai.Feedback("the user is not happy with this command")
+            throw new kotto.Feedback("the user is not happy with this command")
         }
     }
 }
 
-export default ({argv}: ai.AgentOptions) => {
+export default ({argv}: kotto.AgentOptions) => {
     if (argv[0] === undefined) {
-        console.error(`${colors.red("fix:")} you must call this with a command to fix 
+        console.error(`you must call this with a command to fix 
 
 For example:
 
-    trackway run https://trackway.ai/examples/fix.ts -- egrep -e "???" MyFile.txt`)
+    kotto run https://kotto.land/examples/fix.ts -- egrep -e "???" MyFile.txt`)
         Deno.exit(1)
     } else {
         return new Fix(argv)

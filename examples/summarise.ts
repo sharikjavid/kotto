@@ -1,4 +1,4 @@
-import * as ai from "../mod.ts"
+import * as kotto from "../mod.ts"
 
 import {cyan, bold} from "https://deno.land/std@0.198.0/fmt/colors.ts";
 import {parse as parseFlags} from "https://deno.land/std@0.198.0/flags/mod.ts";
@@ -17,13 +17,13 @@ class Summarise {
     }
 
     // Retrieve the content of the README.md of a GitHub repository
-    @ai.use
+    @kotto.use
     getReadme(): string {
         return this.readme
     }
 
     // Summarise the content of the README.md
-    @ai.use
+    @kotto.use
     setSummary({what_does_it_do, how_to_use, how_to_install}: Summary) {
         console.log(cyan(bold("# What does it do")))
         console.log(what_does_it_do)
@@ -36,11 +36,11 @@ class Summarise {
         console.log(cyan(bold("# How to install")))
         console.log(how_to_install)
         console.log()
-        throw new ai.Exit()
+        throw new kotto.Exit()
     }
 }
 
-export default async ({argv}: ai.AgentOptions) => {
+export default async ({argv}: kotto.AgentOptions) => {
     const flags = parseFlags(argv, {
         string: ["branch"]
     })
@@ -50,11 +50,11 @@ export default async ({argv}: ai.AgentOptions) => {
         
 to summarise a repo:
 
-    trackway run summarise.ts -- brokad/trackway 
+    kotto run summarise.ts -- brokad/kotto 
    
 to summarise a specific branch:
 
-    trackway run summarise.ts -- brokad/trackway --branch=master
+    kotto run summarise.ts -- brokad/kotto --branch=master
         `)
         Deno.exit(1)
     }

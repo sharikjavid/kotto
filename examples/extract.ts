@@ -1,4 +1,4 @@
-import * as ai from "../mod.ts"
+import * as kotto from "../mod.ts"
 
 type Data = {
     first_name?: string,
@@ -20,7 +20,7 @@ class Extract {
      *
      * @returns {string} A raw string given by the user
      */
-    @ai.use
+    @kotto.use
     getRawString(): string {
         return this.raw
     }
@@ -30,11 +30,21 @@ class Extract {
      *
      * @param {Data} structured a structured Data object
      */
-    @ai.use
+    @kotto.use
     setData(structured: Data) {
         console.log(structured)
-        throw new ai.Exit(structured)
+        throw new kotto.Exit(structured)
     }
 }
 
-export default ({ argv }: ai.AgentOptions) => new Extract(argv[0])
+export default ({ argv }: kotto.AgentOptions) => {
+    if (argv[0] === undefined) {
+        console.error(`you must call this with a string to extract data from
+
+to extract structured data from a string:
+
+    kotto run https://kotto.land/examples/extract.ts -- "My name is Brody and I'm 21 years old"`)
+        Deno.exit(1)
+    }
+    return new Extract(argv[0])
+}

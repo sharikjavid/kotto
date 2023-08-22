@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-    "tc"
+    "kottoc"
 ]
 
 [workspace.package]
-authors = ["the Trackway authors"]
+authors = ["the Kotto authors"]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/brokad/trackway"
+repository = "https://github.com/brokad/kotto"
 
 [workspace.dependencies]
 deno_ast = { version = "0.27.0", features = [ "transpiling", "codegen" ] }

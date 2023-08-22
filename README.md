@@ -1,23 +1,23 @@
 <h1 align="center">
-  Trackway
+  :robot: kotto
 </h1>
 
 <br/>
 
 <p align="center">
-<b>A TypeScript framework that lets LLMs know how to use your code.</b>
+<b>An agent framework that lets LLMs know how to use your code.</b>
 </p>
 
 <br/>
 
 <p align="center">
-  <a href="examples/hello.ts"><img src="https://trackway.ai/static/hello-im-js.png" width="700"/></a>
+  <a href="examples/hello.ts"><img src="https://kotto.land/static/hello-im-js.png" width="700"/></a>
 </p>
 
 <br/>
 
 > [!WARNING]
-> Trackway is a very early stage project. Expect features and APIs to break frequently.
+> kotto is a very early stage project. Expect features and APIs to break frequently.
 
 <br/>
 
@@ -35,9 +35,9 @@
         - [Classes](#classes)
         - [Exports](#exports)
     - [Event loop](#event-loop)
-        - [`Exit`](#aiexit)
-        - [`Interrupt`](#aiinterrupt)
-        - [`Feedback`](#aifeedback)
+        - [`Exit`](#exit)
+        - [`Interrupt`](#interrupt)
+        - [`Feedback`](#feedback)
         - [Any other exception](#any-other-exception)
 - [FAQ](#faq)
 - [Contributing](#contributing)
@@ -46,22 +46,22 @@
 
 ### Installation
 
-Install the CLI
+Install the kotto CLI
 
 ```bash
-curl -fsSL https://trackway.ai/install.sh | sh
+curl -fsSL https://kotto.land/install.sh | sh
 ```
 
 set your OpenAI API key
 
 ```bash
-trackway config openai.key MY_SECRET_KEY
+kotto config openai.key MY_SECRET_KEY
 ```
 
 and run your first example
 
 ```bash
-trackway run https://trackway.ai/examples/hello.ts
+kotto run https://kotto.land/examples/hello.ts
 ```
 
 ### Hello, I'm a JavaScript runtime.
@@ -69,41 +69,41 @@ trackway run https://trackway.ai/examples/hello.ts
 Create a file `hello.ts` and lay down the skeleton of a class:
 
 ```typescript
-import * as ai from "https://trackway.ai/mod.ts"
+import * as kotto from "https://kotto.land/mod.ts"
 
 class Hello {
     // Call this function with an introduction of yourself
-    @ai.use
+    @kotto.use
     hello(message: string) {
         console.log(message)
-        throw new ai.Exit()
+        throw new kotto.Exit()
     }
 }
 
 export default () => new Hello()
 ```
 
-Note the `@ai.use` decorator and the comment: this is the key to exposing the hello method to the LLM backend and
+Note the `@kotto.use` decorator and the comment: this is the key to exposing the hello method to the LLM backend and
 explaining what we want to happen.
 
 Now run the agent:
 
 ```bash
-$ trackway run hello.ts
+$ kotto run hello.ts
 Hello, I am a JavaScript runtime.
 ```
 
-Under the hood, Trackway has statically generated a prompt set that includes the type signature of the `hello`
-function as well as the comment above it. The model then predicts that it needs to call 
+Under the hood, kotto has statically generated a prompt set that includes the type signature of the `hello`
+function as well as the comment above it. The model then predicts that it needs to call
 the function with the argument `"Hello, I'm a JavaScript program."`.
 
 We can get a bit more insight into what's going on by tuning up the log level:
 
 ```bash
-trackway run --trace hello.ts
+kotto run --trace hello.ts
 ```
 
-This will display a trace log of actions taken by the LLM. Like many other tools, Trackway asks the LLM backend to
+This will display a trace log of actions taken by the LLM. Like many other tools, kotto asks the LLM backend to
 justify the reasoning behind an action choice - and that reasoning is displayed in dimmed text above each action.
 
 ### Type is context
@@ -112,14 +112,14 @@ Because the LLM knows the type signature of the `hello` function, we can use the
 change the example a bit:
 
 ```typescript
-import * as ai from "https://trackway.ai/mod.ts"
+import * as kotto from "https://kotto.land/mod.ts"
 
 class Hello {
     // Call this function with how you feel today
-    @ai.use
+    @kotto.use
     hello(message: "happy" | "neutral" | "sad") {
         console.log(`I am feeling ${message} today.`)
-        throw new ai.Exit()
+        throw new kotto.Exit()
     }
 }
 
@@ -129,14 +129,14 @@ export default () => new Hello()
 and run it again:
 
 ```bash
-$ trackway run hello.ts
+$ kotto run hello.ts
 I am feeling happy today.
 ```
 
 We can also use custom types to document even more context:
 
 ```typescript
-import * as ai from "https://trackway.ai/mod.ts"
+import * as kotto from "https://kotto.land/mod.ts"
 
 type Feeling = {
     // How do you feel?
@@ -147,27 +147,23 @@ type Feeling = {
 }
 
 class Hello {
-    // Call this function saying you're happy to learn about Trackway.
-    @ai.use
+    // Call this function saying you're happy to learn about kotto.
+    @kotto.use
     hello({state, reason}: Feeling) {
         console.log(`I am feeling ${state} today, because ${reason}`)
-        throw new ai.Exit()
+        throw new kotto.Exit()
     }
 }
 
 export default () => new Hello()
 ```
 
-Trackway automatically adds type declarations (here, the `Feeling` type) to the internal prompt set.
+kotto automatically adds type declarations (here, the `Feeling` type) to the internal prompt set.
 
 ```bash
-$ trackway run hello.ts
-I am feeling happy today, because I am excited to learn about Trackway!
+$ kotto run hello.ts
+I am feeling happy today, because I am excited to learn about kotto!
 ```
-
-### Great! What now?
-
-Now that you got a sense for how Trackway works, check out the examples below and start building!
 
 ## :rocket: Examples
 
@@ -179,36 +175,36 @@ text data.
 For example, [extract.ts](./examples/extract.ts) takes a string argument and extracts some info from it:
 
 ```bash
-trackway run https://trackway.ai/examples/extract.ts -- "I am 25 years old and I live in Paris"
+kotto run https://kotto.land/examples/extract.ts -- "I am 25 years old and I live in Paris"
 ```
 
 ### Chatbots
 
-You can use Trackway to build interactive chatbots that can leverage Deno's ecosystem of libraries to pack awesome
+You can use kotto to build interactive chatbots that can leverage Deno's ecosystem of libraries to pack awesome
 functionality into your agents.
 
 To get you started, take a look at [chat.ts](./examples/chat.ts):
 
 ```bash
-trackway run https://trackway.ai/examples/chat.ts
+kotto run https://kotto.land/examples/chat.ts
 ```
 
 ### Automate stuff
 
-You can use Trackway to script agents that automate things for you.
+You can use kotto to script agents that automate things for you.
 
 For example, [fix.ts](./examples/fix.ts) is a small utility that will take a command and help you with getting what
 you want with it:
 
 ```bash
-trackway run https://trackway.ai/examples/fix.ts -- egrep -e "???" MyFile.txt 
+kotto run https://kotto.land/examples/fix.ts -- egrep -e "???" MyFile.txt 
 ```
 
 Another example is [summarise.ts](./examples/summarise.ts), which will take a GitHub repository, pull its README.md
 and summarise it with the info you want:
 
 ```bash
-trackway run https://trackway.ai/examples/summarise.ts -- brokad/trackway
+kotto run https://kotto.land/examples/summarise.ts -- brokad/kotto
 ```
 
 ## :books: Documentation
@@ -221,22 +217,24 @@ Thanks to Deno's module loader, which supports importing from URLs, you only nee
 your agent modules:
 
 ```typescript
-import * as ai from "https://trackway.ai/mod.ts"
+import * as kotto from "https://kotto.land/mod.ts"
 ```
 
 This tracks the latest release. If you need a specific version, use:
 
 ```typescript
-import * as ai from "https://trackway.ai/@0.1.0/mod.ts"
+import * as kotto from "https://kotto.land/@0.1.0/mod.ts"
 ```
 
-#### Classes
+#### Agents
 
 Any class can become an agent. Just make sure you decorate at least one of its methods with `@use`:
 
 ```typescript
+import { use } from "https://kotto.land/mod.ts"
+
 class MyAgent {
-    @ai.use
+    @use
     myMethod() {
         // ...
     }
@@ -246,7 +244,8 @@ class MyAgent {
 > [!IMPORTANT]
 > The LLM backend does not know of any other method than the ones you decorate with `@use`.
 
-When a method is decorated with `@use`, its type signature and its JSDoc/comments (if there are any) are added to the prompt set. However, the method's body is kept hidden.
+When a method is decorated with `@use`, its type signature and its JSDoc/comments (if there are any) are added to the
+prompt set. However, the method's body is kept hidden.
 
 #### Exports
 
@@ -256,66 +255,81 @@ Agent modules must have a default export that is a callable and returns an insta
 export default () => new MyAgent()
 ```
 
-This function can accept an argument of type [AgentOptions]() to extract command line arguments:
+This function can accept an argument of type `AgentOptions`:
 
 ```typescript
-export default ({argv}: AgentOptions) => {
-    // do something with argv
+export default ({ argv }: AgentOptions) => {
+    // ...do something with argv
     return new MyAgent()
+}
+```
+
+The `AgentOptions` type is defined as:
+
+```typescript
+type AgentOptions = {
+    // The arguments passed to the agent on the command line (all the arguments after '--')
+    argv: string[]
 }
 ```
 
 ### Event loop
 
-When you run an agent with `trackway run`, the runtime will enter an event loop. It will keep bouncing back and forth
+When you run an agent with `kotto run`, the runtime will enter an event loop. It will keep bouncing back and forth
 between your agent and the LLM backend. In other words: your class goes on autopilot.
 
 There are exceptions you can throw to control that event loop:
 
-#### `ai.Exit`
+#### `Exit`
 
 This exception will be unwound, stop the event loop and exit the runtime.
 
 ```typescript
+import { use, Exit } from "https://kotto.land/mod.ts"
+
 class MyAgent {
-    @ai.use
+    @use
     myMethod() {
         // Exit the event loop, and the runtime
-        throw new ai.Exit()
+        throw new Exit()
     }
 }
 ```
 
-#### `ai.Interrupt`
+#### `Interrupt`
 
 This exception will be unwound and the inner `Error` will be rethrown.
 
 ```typescript
+import { use, Interrupt } from "https://kotto.land/mod.ts"
+
 class MyAgent {
-    @ai.use
+    @use
     async readFile(path: string) {
         try {
             return await Deno.readTextFile(path)
         } catch (e) {
             // Exit the event loop, rethrowing the error
-            throw new ai.Interrupt(e)
+            throw new Interrupt(e)
         }
     }
 }
 ```
 
-#### `ai.Feedback`
+#### `Feedback`
 
 This exception will be unwound and repackaged as
 a [system message](https://platform.openai.com/docs/api-reference/chat/create) to the LLM backend. You can use it to
 bounce back information to the LLM, which is especially useful on validating inputs it gives you:
 
 ```typescript
+import { use, Feedback } from "https://kotto.land/mod.ts"
+
 class MyAgent {
-    @ai.use
+    @use
     howOldAreYou(age: number) {
         // Send a system message to the LLM backend
-        if (age < 0) throw new ai.Feedback("age cannot be negative")
+        if (age < 0) throw new Feedback("age cannot be negative")
     }
 }
 ```
@@ -329,10 +343,10 @@ that exception will be repackaged as a system message and sent back to the LLM.
 
 ### How safe is it?
 
-Trackway lets an LLM decide what action to take next. And since LLMs are large and complicated models, it is difficult
+kotto lets an LLM decide what action to take next. And since LLMs are large and complicated models, it is difficult
 to guarantee agents are safe against adversarial user inputs.
 
-At the level of Trackway, there are a few implemented backstops that can help.
+At the level of kotto, there are a few implemented backstops that can help.
 
 One of them is that we **never** execute code coming directly from the LLM backend. We have a pure JSON-only interface
 with the LLM,
@@ -353,15 +367,15 @@ public-facing API.
 
 ## Contributing
 
-Trackway is 100% a community effort to make LLM chains easy to build and use. And I'm so grateful you're willing to
+kotto is 100% a community effort to make LLM chains easy to build and use. And I'm so grateful you're willing to
 help!
 
 If you have found a bug or have a suggestion for a feature you'd like, open
-an [issue](https://github.com/brokad/trackway/issues/new). PRs are of course always
+an [issue](https://github.com/brokad/kotto/issues/new). PRs are of course always
 welcome!
 
 If you have a question to ask or feedback to give, be it good or bad, please start
-a [discussion](https://github.com/brokad/trackway/discussions/new?category=ideas).
+a [discussion](https://github.com/brokad/kotto/discussions/new?category=ideas).
 
 If you feel like helping with the implementation, get in touch!
 

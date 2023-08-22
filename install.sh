@@ -2,11 +2,11 @@
 deno \
   install \
   -A \
-  --name="trackway" \
-  https://trackway.ai/cli.ts
+  --name="kotto" \
+  https://kotto.land/cli.ts
 
 export PATH="$HOME/.deno/bin:$PATH"
 
-trackway upgrade
+kotto upgrade
 
-trackway --help
+kotto --help

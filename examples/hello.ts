@@ -1,4 +1,4 @@
-import * as ai from "../mod.ts"
+import * as kotto from "../mod.ts"
 
 export class Hello {
     /**
@@ -6,10 +6,10 @@ export class Hello {
      * 
      * @param {string} message A positive message
      */
-    @ai.use
+    @kotto.use
     positivity(message: string) {
         console.log(message)
-        throw new ai.Exit(message)
+        throw new kotto.Exit(message)
     }
 }
 

@@ -13,7 +13,7 @@ pub struct Config {
 
 impl Config {
     pub fn path() -> PathBuf {
-        home::home_dir().unwrap().join(".config").join("trackway").join("config.toml")
+        home::home_dir().unwrap().join(".config").join("kotto").join("config.toml")
     }
 
     pub async fn load() -> Result<Self, Error> {

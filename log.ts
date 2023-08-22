@@ -114,12 +114,12 @@ class Logger {
         this.trace(colors.gray("╭"), colors.gray(msg))
     }
     
-    eprint(msg?: string, header = "trackway", color: Color = "cyan") {
+    eprint(msg?: string, header = "kotto", color: Color = "cyan") {
         if (color == undefined)
             color = "cyan"
 
         if (header === undefined)
-            header = "trackway"
+            header = "kotto"
 
         const color_fn = toColorFn(color)
 
