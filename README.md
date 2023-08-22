@@ -22,6 +22,7 @@
 <br/>
 
 - [Getting Started](#runner-getting-started)
+    - [Requirements](#requirements)
     - [Installation](#installation)
     - [Hello, world!](#hello-im-a-javascript-runtime)
     - [Type is context](#type-is-context)
@@ -43,6 +44,15 @@
 - [Contributing](#contributing)
 
 ## :runner: Getting Started
+
+### Requirements
+
+kotto is built on top of [Deno](https://deno.land/), a secure runtime for JavaScript and TypeScript. You'll need to
+install it to run kotto agents. Use the [official guide](https://deno.land/manual/getting_started/installation) to get 
+started.
+
+kotto also uses [OpenAI's API](https://platform.openai.com/docs/introduction) as the only supported LLM backend is 
+gpt-3.5 (more to come soon!). So you'll need an OpenAI API key. You can generate one [over here](https://platform.openai.com/account/api-keys).
 
 ### Installation
 
@@ -69,11 +79,11 @@ kotto run https://kotto.land/examples/hello.ts
 Create a file `hello.ts` and lay down the skeleton of a class:
 
 ```typescript
-import * as kotto from "https://kotto.land/mod.ts"
+import { use } from "https://kotto.land/mod.ts"
 
 class Hello {
     // Call this function with an introduction of yourself
-    @kotto.use
+    @use
     hello(message: string) {
         console.log(message)
         throw new kotto.Exit()
@@ -83,8 +93,7 @@ class Hello {
 export default () => new Hello()
 ```
 
-Note the `@kotto.use` decorator and the comment: this is the key to exposing the hello method to the LLM backend and
-explaining what we want to happen.
+Note the `@use` decorator and the comment above it: this is the key to exposing the hello method to the LLM backend.
 
 Now run the agent:
 
@@ -103,8 +112,8 @@ We can get a bit more insight into what's going on by tuning up the log level:
 kotto run --trace hello.ts
 ```
 
-This will display a trace log of actions taken by the LLM. Like many other tools, kotto asks the LLM backend to
-justify the reasoning behind an action choice - and that reasoning is displayed in dimmed text above each action.
+This will display a trace log of actions taken by the LLM along with (in dimmed text) the model's explanation for the
+choice.
 
 ### Type is context
 
@@ -112,31 +121,31 @@ Because the LLM knows the type signature of the `hello` function, we can use the
 change the example a bit:
 
 ```typescript
-import * as kotto from "https://kotto.land/mod.ts"
+import { use, Exit } from "https://kotto.land/mod.ts"
 
 class Hello {
     // Call this function with how you feel today
-    @kotto.use
+    @use
     hello(message: "happy" | "neutral" | "sad") {
         console.log(`I am feeling ${message} today.`)
-        throw new kotto.Exit()
+        throw new Exit()
     }
 }
 
 export default () => new Hello()
 ```
 
-and run it again:
+Because `message` now has a union type, it will be called only with one of the three stated options. Let's run it again:
 
 ```bash
 $ kotto run hello.ts
 I am feeling happy today.
 ```
 
-We can also use custom types to document even more context:
+We can also use custom/nested types to document even more context:
 
 ```typescript
-import * as kotto from "https://kotto.land/mod.ts"
+import { use, Exit } as kotto from "https://kotto.land/mod.ts"
 
 type Feeling = {
     // How do you feel?
@@ -148,10 +157,10 @@ type Feeling = {
 
 class Hello {
     // Call this function saying you're happy to learn about kotto.
-    @kotto.use
+    @use
     hello({state, reason}: Feeling) {
         console.log(`I am feeling ${state} today, because ${reason}`)
-        throw new kotto.Exit()
+        throw new Exit()
     }
 }
 
@@ -169,19 +178,40 @@ I am feeling happy today, because I am excited to learn about kotto!
 
 ### Data from text
 
-Since the type system is used to generate prompts, you can use the underlying LLM to extract data from real-world noisy
-text data.
+Kotto generates LLM prompts from your code's type signatures and comments. This means you can use type declarations to
+define what you want from the LLM.
 
-For example, [extract.ts](./examples/extract.ts) takes a string argument and extracts some info from it:
+For example, [extract.ts](./examples/extract.ts) takes a string argument and extracts the following type:
+
+```typescript
+type Data = {
+    first_name?: string,
+
+    age?: number,
+
+    location?: string,
+
+    sentiment?: "positive" | "negative"
+}
+```
+
+Let's run it:
 
 ```bash
-kotto run https://kotto.land/examples/extract.ts -- "I am 25 years old and I live in Paris"
+$ kotto run https://kotto.land/examples/extract.ts -- \
+  "I'm Marc, I am 25 years old, I live in Paris and I'm very happy"
+{
+  first_name: "Marc",
+  age: 25,
+  location: "Paris",
+  sentiment: "positive"
+}
 ```
 
 ### Chatbots
 
-You can use kotto to build interactive chatbots that can leverage Deno's ecosystem of libraries to pack awesome
-functionality into your agents.
+You can also use kotto to build interactive chatbots. Deno has a large ecosystem of modules that you can use to pack
+awesome functionality into your agents. Then you can deploy them on [Deno Deploy](https://deno.com/deploy).
 
 To get you started, take a look at [chat.ts](./examples/chat.ts):
 
@@ -191,21 +221,20 @@ kotto run https://kotto.land/examples/chat.ts
 
 ### Automate stuff
 
-You can use kotto to script agents that automate things for you.
+You can also use kotto to script agents that automate things for you in a clever way. If you've ever found yourself 
+constantly copy/pasting things into a ChatGPT prompt, you'll love this.
 
 For example, [fix.ts](./examples/fix.ts) is a small utility that will take a command and help you with getting what
 you want with it:
 
-```bash
-kotto run https://kotto.land/examples/fix.ts -- egrep -e "???" MyFile.txt 
+```text
+$ kotto run https://kotto.land/examples/fix.ts -- egrep /var/log/sshd.log 
+[...] I want to match all IPv4 addresses in the file
+$ egrep -e \b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b /var/log/sshd.log
 ```
 
 Another example is [summarise.ts](./examples/summarise.ts), which will take a GitHub repository, pull its README.md
-and summarise it with the info you want:
-
-```bash
-kotto run https://kotto.land/examples/summarise.ts -- brokad/kotto
-```
+and summarise it with the info you want.
 
 ## :books: Documentation
 
@@ -213,14 +242,13 @@ kotto run https://kotto.land/examples/summarise.ts -- brokad/kotto
 
 #### Imports
 
-Thanks to Deno's module loader, which supports importing from URLs, you only need one import to get started. Add this to
-your agent modules:
+All you need is one import to get started building your own agents with kotto:
 
 ```typescript
 import * as kotto from "https://kotto.land/mod.ts"
 ```
 
-This tracks the latest release. If you need a specific version, use:
+This tracks the latest release (recommended). If you ever need to pin a specific version, use:
 
 ```typescript
 import * as kotto from "https://kotto.land/@0.1.0/mod.ts"
@@ -276,7 +304,7 @@ type AgentOptions = {
 ### Event loop
 
 When you run an agent with `kotto run`, the runtime will enter an event loop. It will keep bouncing back and forth
-between your agent and the LLM backend. In other words: your class goes on autopilot.
+between your code and the LLM backend.
 
 There are exceptions you can throw to control that event loop:
 
@@ -298,7 +326,7 @@ class MyAgent {
 
 #### `Interrupt`
 
-This exception will be unwound and the inner `Error` will be rethrown.
+This exception will be unwound and the inner `Error` will be rethrown by the event loop handler.
 
 ```typescript
 import { use, Interrupt } from "https://kotto.land/mod.ts"
@@ -320,7 +348,7 @@ class MyAgent {
 
 This exception will be unwound and repackaged as
 a [system message](https://platform.openai.com/docs/api-reference/chat/create) to the LLM backend. You can use it to
-bounce back information to the LLM, which is especially useful on validating inputs it gives you:
+bounce back information to the LLM:
 
 ```typescript
 import { use, Feedback } from "https://kotto.land/mod.ts"
@@ -336,34 +364,36 @@ class MyAgent {
 
 #### Any other exception
 
-If a method called by the LLM backend throws an exception and that exception is not one of the exceptions above, then
-that exception will be repackaged as a system message and sent back to the LLM.
+Any other exception thrown by your code (that is not caught before reaching a @use method) will be unwound and repackaged
+as a system message to the LLM backend. This will give it a chance to recover from the error and continue its course.
 
 ## FAQ
 
-### How safe is it?
+### Does kotto let LLMs run arbitrary code?
 
-kotto lets an LLM decide what action to take next. And since LLMs are large and complicated models, it is difficult
-to guarantee agents are safe against adversarial user inputs.
+Hell no! There is only a single JSON-in/JSON-out interface with the LLM backend, so we never execute code coming from it.
 
-At the level of kotto, there are a few implemented backstops that can help.
+### Why do I need an OpenAI key?
 
-One of them is that we **never** execute code coming directly from the LLM backend. We have a pure JSON-only interface
-with the LLM,
-asking it for data and returning it data. So the model is unable to have side effects that you didn't expose through the
-content of your own code.
+The only LLM backend supported by kotto is gpt-3.5 (but more are coming soon!).
 
-Another backstop is that *only* methods that are explicitly tagged with the [@use](#building-agents) annotation are
-exposed to the
-LLM. Therefore, only those methods are known to the model. Even the method's body is hidden from the model! So it only
-knows of the public interface: the method name, its documentation, the method's arguments, the type declarations of
-those arguments, etc. Basically it knows what you would otherwise know reading through a documentation page.
+### Is my code sent to OpenAI?
 
-That being said, if security is a concern, you should always validate untrusted inputs and carefully consider the side
-effects your agent can produce.
+Some of it. Kotto generates prompts from your code's type signatures and comments. It then sends those prompts to the
+LLM backend. The LLM backend then sends back a completion, which kotto uses to run its event loop.
 
-TL;DR: If you're dealing with untrusted user input, apply the same caution as you would when implementing any
-public-facing API.
+The body of methods is never part of that prompt set because that tends to pollute the context window and confuse the 
+model. So that code is never sent to OpenAI. And methods that are **not** decorated with [`@use`](#agents) are completely
+omitted so they remain private.
+
+On the other hand, method names, argument names and type declarations are indeed sent to OpenAI - but only for 
+methods tagged with `@use`.
+
+### Is any data sent to `kotto.land`?
+
+No! We use the `kotto.land` domain as an easy import path (which works thanks to Deno's awesome 
+[module loader](https://deno.land/manual@v1.36.2/basics/modules#remote-import)). But kotto works 100% locally as an 
+orchestrator between your code and the LLM backend.
 
 ## Contributing
 
