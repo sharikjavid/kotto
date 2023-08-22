@@ -123,7 +123,7 @@ class Logger {
 
         const color_fn = toColorFn(color)
 
-        console.error(`${color_fn(header + ":")} ${msg || ""}`)
+        console.error(`${color_fn(header)}: ${msg || ""}`)
     }
 }
 

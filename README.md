@@ -5,14 +5,21 @@
 <br/>
 
 <p align="center">
-<b>An agent framework that lets LLMs know how to use your code.</b>
+<b>An agent framework that tells LLMs how to use your code</b>
 </p>
 
 <br/>
 
-<p align="center">
-  <a href="examples/hello.ts"><img src="https://kotto.land/static/hello-im-js.png" width="700"/></a>
-</p>
+<div align="center">
+  <a href="https://snappify.com/view/7439fa7d-84d0-4284-b641-739242eb7ea1?autoplay=1">
+    <img src="https://kotto.land/static/hello.png?" width="700"/>
+  </a>
+</div>
+<div align="center">
+  <a href="https://snappify.com/view/7439fa7d-84d0-4284-b641-739242eb7ea1?autoplay=1">
+    Animated Demo
+  </a>
+</div>
 
 <br/>
 
@@ -33,7 +40,7 @@
 - [Documentation](#books-documentation)
     - [Building agents](#building-agents)
         - [Imports](#imports)
-        - [Classes](#classes)
+        - [Classes](#agents)
         - [Exports](#exports)
     - [Event loop](#event-loop)
         - [`Exit`](#exit)
@@ -79,37 +86,66 @@ kotto run https://kotto.land/examples/hello.ts
 Create a file `hello.ts` and lay down the skeleton of a class:
 
 ```typescript
-import { use } from "https://kotto.land/mod.ts"
+import { use, Exit } from "https://kotto.land/mod.ts"
 
 class Hello {
-    // Call this function with an introduction of yourself
     @use
     hello(message: string) {
         console.log(message)
-        throw new kotto.Exit()
+        throw new Exit()
     }
 }
 
 export default () => new Hello()
 ```
 
-Note the `@use` decorator and the comment above it: this is the key to exposing the hello method to the LLM backend.
+Note the kotto `@use` decorator: this is the key to exposing the hello method to the LLM backend.
 
 Now run the agent:
 
 ```bash
 $ kotto run hello.ts
-Hello, I am a JavaScript runtime.
+Hello, World!
 ```
 
-Under the hood, kotto has statically generated a prompt set that includes the type signature of the `hello`
-function as well as the comment above it. The model then predicts that it needs to call
-the function with the argument `"Hello, I'm a JavaScript program."`.
+Under the hood, kotto has statically generated a prompt set that includes the type signature of the `hello`. The model 
+then predicts that it needs to call the function with the argument `"Hello, World!"`. And that message gets written to 
+stdout.
+
+We can also use comments to tell the model a bit more about what we want:
+
+```typescript
+import { use, Exit } from "https://kotto.land/mod.ts"
+
+class Hello {
+    @use
+    // This function should be called with a message in High Valyrian
+    hello(message: string) {
+        console.log(message)
+        throw new Exit()
+    }
+}
+
+export default () => new Hello()
+```
+
+and run it again:
+
+```bash
+$ kotto run hello.ts
+Valar Morghulis!
+```
 
 We can get a bit more insight into what's going on by tuning up the log level:
 
-```bash
-kotto run --trace hello.ts
+```text
+$ kotto debug hello.ts
+trace: adding 'hello' to scope 
+trace:     ╭ Since the program states that the function 'hello' should be called with a message in High Valyrian, 
+             I will call this function to pass the appropriate message to it.
+trace:  call hello("Valar morghulis")
+Valar morghulis
+trace:  exit null
 ```
 
 This will display a trace log of actions taken by the LLM along with (in dimmed text) the model's explanation for the
@@ -124,8 +160,8 @@ change the example a bit:
 import { use, Exit } from "https://kotto.land/mod.ts"
 
 class Hello {
-    // Call this function with how you feel today
     @use
+    // Call this function with how you feel today
     hello(message: "happy" | "neutral" | "sad") {
         console.log(`I am feeling ${message} today.`)
         throw new Exit()
@@ -145,7 +181,7 @@ I am feeling happy today.
 We can also use custom/nested types to document even more context:
 
 ```typescript
-import { use, Exit } as kotto from "https://kotto.land/mod.ts"
+import { use, Exit } from "https://kotto.land/mod.ts"
 
 type Feeling = {
     // How do you feel?
@@ -156,8 +192,8 @@ type Feeling = {
 }
 
 class Hello {
-    // Call this function saying you're happy to learn about kotto.
     @use
+    // Call this function saying you're happy to learn about kotto.
     hello({state, reason}: Feeling) {
         console.log(`I am feeling ${state} today, because ${reason}`)
         throw new Exit()

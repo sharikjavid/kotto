@@ -6,7 +6,7 @@ import { grantOrThrow } from "https://deno.land/std@0.198.0/permissions/mod.ts"
 import { error, info } from "./log.ts"
 import { runRust, type RunParameters } from "./prompts.ts"
 
-const TRACKWAY_REPO = "ssh://git@github.com/brokad/kotto"
+const KOTTO_REPO = "https://github.com/brokad/kotto"
 
 export function ask(question: string): "yes" | "no" {
     const ans = prompt(`${colors.bold(colors.cyan("install:"))} ${question} [Y/n]`)
@@ -76,7 +76,7 @@ async function donwloadLatestRelease() {
 export async function runCargoInstall() {
     try {
         const cmd = new Deno.Command("cargo", {
-            args: ["install", "--bin=kottoc", `--git=${TRACKWAY_REPO}.git`]
+            args: ["install", "--bin=kottoc", `--git=${KOTTO_REPO}`]
         })
         if (!(await cmd.spawn().status).success) {
             error("cargo seems to have exited unsuccessfully, things may not work as expected")

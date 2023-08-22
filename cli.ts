@@ -244,10 +244,10 @@ async function config(attr: string, value: string) {
 }
 
 async function upgrade() {
-    log.info("installing kotto...")
+    log.info("installing kottoc...")
     // TODO upgrade this cli too
     await runCargoInstall()
-    log.info("kotto is installed 🎉")
+    log.info("kottoc is installed 🎉")
 }
 
 interface ErrorExt extends Error {
