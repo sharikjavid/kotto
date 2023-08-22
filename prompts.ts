@@ -1,6 +1,8 @@
 import { join as joinPath, toFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
 
 import { RuntimeError } from "./errors.ts"
+import * as log from "./log.ts"
+import {logger} from "./log.ts";
 
 export type RunParameters = {
     exec?: string
@@ -73,6 +75,8 @@ export class Prompts {
         if (!(await proc?.status)?.success) {
             throw new RuntimeError(`failed to generate prompts for ${url.toString()}`)
         }
+
+        logger.trace(`generated prompts for ${url.toString()} to ${joinPath(output_path, output_name)}`)
 
         return Prompts.fromModule(await import(joinPath(output_path, output_name)))
     }

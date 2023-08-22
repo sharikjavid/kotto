@@ -234,7 +234,7 @@ type Data = {
 Let's run it:
 
 ```bash
-$ kotto run https://kotto.land/examples/extract.ts -- \
+$ kotto run  https://kotto.land/examples/extract.ts -- \
   "I'm Marc, I am 25 years old, I live in Paris and I'm very happy"
 {
   first_name: "Marc",

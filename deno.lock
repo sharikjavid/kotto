@@ -92,7 +92,15 @@
     "https://deno.land/std@0.198.0/toml/_parser.ts": "63d68503fc4e22dcc6b677126765e67fe570e62c86199874efd8b6c976dc2679",
     "https://deno.land/std@0.198.0/toml/mod.ts": "b7127578e29155a91a45991e098a5478e6c61d0a4fbd2a99fd08b9043cab2ba1",
     "https://deno.land/std@0.198.0/toml/parse.ts": "e900bafdf35d802519842a303e07a62ea5282186960b3474e8083509ab1c7f0d",
-    "https://deno.land/std@0.198.0/toml/stringify.ts": "be8c9182353f80234cf296ca26d4e605b4672e35a2aa0648cc942b5605d4bc1d"
+    "https://deno.land/std@0.198.0/toml/stringify.ts": "be8c9182353f80234cf296ca26d4e605b4672e35a2aa0648cc942b5605d4bc1d",
+    "https://raw.githubusercontent.com/brokad/kotto/main/const.ts": "03e867de2425df75f44294e9290802039c196eb207aa7d1c0c897fd3b6e46efa",
+    "https://raw.githubusercontent.com/brokad/kotto/main/deps.ts": "1ed838ce2fb83f136733ddab57501e945f7b3130545dd07e02c255c959bdac21",
+    "https://raw.githubusercontent.com/brokad/kotto/main/errors.ts": "1bf5697ef00b4f8e26db09b2d5feaf0041bf8fdfe54d9e9bf19f4a2caecbf136",
+    "https://raw.githubusercontent.com/brokad/kotto/main/examples/hello.ts": "b354c43726f1d4f998905d7abb9ebaad38c327c2476753c329b835354269c3a1",
+    "https://raw.githubusercontent.com/brokad/kotto/main/llm.ts": "bd11e1115e646dff0eeb4df43fa6a94b9eddcf53e31282d06ced16daf1f3e5ec",
+    "https://raw.githubusercontent.com/brokad/kotto/main/log.ts": "7edb2c7b28d185f6187e23e6f638cc7bb24d128c3261d8d80f30c9a82665c8e5",
+    "https://raw.githubusercontent.com/brokad/kotto/main/mod.ts": "bde209092aba929710477f0aa3d72849a674d6c5587928b7d95c944007aea2d0",
+    "https://raw.githubusercontent.com/brokad/kotto/main/prompts.ts": "0995a564eae16c795b2c105ab561aea6b8680e4fbaa6972ee663f96ec911a78f"
   },
   "npm": {
     "specifiers": {
