@@ -183,6 +183,10 @@ try adding:
         work_dir: temp_dir
     })
 
+    // Note: ensure { recursive: true } is *not* passed to this; the prompts files should
+    // be deleted before we get here, otherwise this is an error.
+    await Deno.remove(temp_dir)
+
     const ctl = new AgentController(agent, prompts, llm)
 
     return await ctl.runToCompletion()

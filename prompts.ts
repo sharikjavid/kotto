@@ -1,7 +1,6 @@
-import { join as joinPath, toFileUrl } from "https://deno.land/std@0.198.0/path/mod.ts"
+import { join as joinPath, toFileUrl } from "./deps.ts"
 
 import { RuntimeError } from "./errors.ts"
-import * as log from "./log.ts"
 import {logger} from "./log.ts";
 
 export type RunParameters = {
@@ -76,9 +75,15 @@ export class Prompts {
             throw new RuntimeError(`failed to generate prompts for ${url.toString()}`)
         }
 
-        logger.trace(`generated prompts for ${url.toString()} to ${joinPath(output_path, output_name)}`)
+        const import_local_path = joinPath(output_path, output_name)
+        logger.trace(`generated prompts for ${url.toString()} to ${import_local_path}`)
 
-        return Prompts.fromModule(await import(joinPath(output_path, output_name)))
+        const import_path = toFileUrl(import_local_path).href
+        const prompts = Prompts.fromModule(await import(import_path))
+
+        await Deno.remove(import_local_path)
+
+        return prompts
     }
 
     static async fromPath(path: string, opts: PromptOpts = {}): Promise<Prompts> {
