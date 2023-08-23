@@ -79,7 +79,8 @@ export class Prompts {
 
     const import_local_path = joinPath(output_path, output_name);
     logger.trace(
-      `generated prompts for ${url.toString()} to ${import_local_path}`,
+      "prompts",
+      `generated for ${url.toString()}, output: ${import_local_path}`,
     );
 
     const import_path = toFileUrl(import_local_path).href;

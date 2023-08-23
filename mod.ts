@@ -157,7 +157,7 @@ export class AgentController {
     const scope = this.prompts.newScope();
 
     this.exports.forEach(({ property_key, adder }) => {
-      logger.trace(`adding '${property_key}' to scope`);
+      logger.trace("prompts", `adding '${property_key}' to scope`);
       adder(scope);
     });
 
