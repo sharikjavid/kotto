@@ -63,7 +63,7 @@ Arguments:
 
 Options:
     --trace      Enable trace logging
-    --allow-exit Allow the agent to decide when to exit
+    --no-exit    Do not allow the agent to call exit by itself
 `;
 
 const HELP_DEBUG = `Run an agent in debug mode
@@ -78,7 +78,7 @@ Arguments:
     PATH         Path to the agent to run
     
 Options:
-    --allow-exit Allow the agent to decide when to exit
+    --no-exit    Do not allow the agent to call exit by itself
 `;
 
 const HELP_CONFIG = `Set configuration options
@@ -147,10 +147,6 @@ type RunFlags = {
 export async function doRun(args: RunFlags): Promise<any> {
   log.setLogLevel(args.trace ? "trace" : "quiet");
 
-  if (args.allow_exit === true) {
-    log.warn("allow_exit is not yet implemented");
-  }
-
   const config = await getConfig();
 
   const openai_key = config.openai?.key;
@@ -195,7 +191,9 @@ try adding:
   // be deleted before we get here, otherwise this is an error.
   await Deno.remove(temp_dir);
 
-  const ctl = new AgentController(agent, prompts, llm);
+  const ctl = new AgentController(agent, prompts, llm, {
+    allow_exit: args.allow_exit,
+  });
 
   return await ctl.runToCompletion();
 }
@@ -278,7 +276,7 @@ function unwind(err: ErrorExt) {
 
 async function main() {
   const args = flags.parse(Deno.args, {
-    boolean: ["help", "trace", "version", "allow-exit"],
+    boolean: ["help", "trace", "version", "no-exit"],
   });
 
   if (args.version) {
@@ -308,7 +306,7 @@ async function main() {
       await doRun({
         path: args._[1],
         trace: args.trace || command == "debug",
-        allow_exit: args["allow-exit"],
+        allow_exit: !args["no-exit"],
         is_debug: command == "debug",
         openai_key: "", // TODO
       });

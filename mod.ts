@@ -123,6 +123,10 @@ export function isPending(exited: Exited | Pending): exited is Pending {
   return "prompt" in exited;
 }
 
+export type AgentControllerOpts = {
+  allow_exit?: boolean;
+};
+
 /**
  * An agent controller is a class that manages the execution of an agent.
  *
@@ -141,7 +145,14 @@ export class AgentController {
 
   history: Action[] = [];
 
-  constructor(agent: Agent, prompts: Prompts, llm: llm.LLM) {
+  opts: AgentControllerOpts;
+
+  constructor(
+    agent: Agent,
+    prompts: Prompts,
+    llm: llm.LLM,
+    opts: AgentControllerOpts = {},
+  ) {
     this.agent = agent;
 
     this.prompts = prompts;
@@ -151,6 +162,8 @@ export class AgentController {
     this.llm = llm;
 
     this.template = agent.template || Naive;
+
+    this.opts = opts;
   }
 
   renderContext(): string {
@@ -161,11 +174,38 @@ export class AgentController {
       adder(scope);
     });
 
+    if (this.opts.allow_exit ?? true) {
+      scope.addNode({
+        type: "ts",
+        fmt: "builtins.exit",
+        id: "builtins.exit",
+      });
+    }
+
     return this.template.renderContext(scope);
+  }
+
+  handleBuiltin(action: Action) {
+    const builtin = action.call.name.split(".")[1];
+
+    if (builtin === "exit") {
+      if (action.call.arguments.length === 0) {
+        throw new Exit();
+      } else {
+        throw new Exit(action.call.arguments[0]);
+      }
+    } else {
+      throw new RuntimeError(`unknown builtin '${builtin}'`);
+    }
   }
 
   async doAction(action: Action) {
     const exports = this.agent.exports;
+
+    // if action.call.name is a builtin, call handleBuiltin
+    if (action.call.name.startsWith("builtins.")) {
+      return this.handleBuiltin(action);
+    }
 
     const export_descriptor = exports.get(action.call.name);
 
