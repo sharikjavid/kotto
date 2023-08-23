@@ -1,164 +1,185 @@
-import { grantOrThrow, colors, join, dirname, ensureDir } from "./deps.ts"
+import { colors, dirname, ensureDir, grantOrThrow, join } from "./deps.ts";
 
-import { error, info } from "./log.ts"
-import { runRust, type RunParameters } from "./prompts.ts"
+import { error, info } from "./log.ts";
+import { type RunParameters, runRust } from "./prompts.ts";
 
-const KOTTO_REPO = "https://github.com/brokad/kotto"
+const KOTTO_REPO = "https://github.com/brokad/kotto";
 
 export function ask(question: string): "yes" | "no" {
-    const ans = prompt(`${colors.bold(colors.cyan("install:"))} ${question} [Y/n]`)
-    if (!(ans === "y" || ans === "Y" || ans === null)) {
-        return "no"
-    } else {
-        return "yes"
-    }
+  const ans = prompt(
+    `${colors.bold(colors.cyan("install:"))} ${question} [Y/n]`,
+  );
+  if (!(ans === "y" || ans === "Y" || ans === null)) {
+    return "no";
+  } else {
+    return "yes";
+  }
 }
 
 type Platform = {
-    machine: string,
-    os: string
-}
+  machine: string;
+  os: string;
+};
 
 async function doUname(): Promise<Platform> {
-    const cmd = new Deno.Command("uname", {
-        args: ["-sm"]
-    })
-    const stdout = (await cmd.output()).stdout
-    const output = new TextDecoder().decode(stdout)
-    const [os, machine] = output.toLowerCase().split(" ")
-    return {
-        machine,
-        os
-    }
+  const cmd = new Deno.Command("uname", {
+    args: ["-sm"],
+  });
+  const stdout = (await cmd.output()).stdout;
+  const output = new TextDecoder().decode(stdout);
+  const [os, machine] = output.toLowerCase().split(" ");
+  return {
+    machine,
+    os,
+  };
 }
 
 async function resolveLatestRelease(): Promise<URL> {
-    const { machine, os } = await doUname()
-    return new URL(`https://github.com/brokad/kotto/releases/latest/download/kotto-${os}-${machine}`)
+  const { machine, os } = await doUname();
+  return new URL(
+    `https://github.com/brokad/kotto/releases/latest/download/kotto-${os}-${machine}`,
+  );
 }
 
 async function donwloadLatestRelease() {
-    const github_bin_url = await resolveLatestRelease()
+  const github_bin_url = await resolveLatestRelease();
 
-    const home = Deno.env.get("HOME")
+  const home = Deno.env.get("HOME");
 
-    if (home === undefined) throw new Error("could not locate home")
+  if (home === undefined) throw new Error("could not locate home");
 
-    const bin_target_path = join(home, ".local/bin/kottoc")
-    const bin_target_dir = dirname(bin_target_path)
+  const bin_target_path = join(home, ".local/bin/kottoc");
+  const bin_target_dir = dirname(bin_target_path);
 
-    await ensureDir(bin_target_dir)
+  await ensureDir(bin_target_dir);
 
-    const resp = await fetch(new Request(github_bin_url, {
-        redirect: "follow"
-    }))
+  const resp = await fetch(
+    new Request(github_bin_url, {
+      redirect: "follow",
+    }),
+  );
 
-    if (resp.status != 200) {
-        error(`could not download kottoc: ${resp.statusText}`)
-        return
-    }
+  if (resp.status != 200) {
+    error(`could not download kottoc: ${resp.statusText}`);
+    return;
+  }
 
-    info(`downloading ${github_bin_url}`)
+  info(`downloading ${github_bin_url}`);
 
-    const f = await Deno.open(bin_target_path, {
-        write: true,
-        create: true,
-    })
+  const f = await Deno.open(bin_target_path, {
+    write: true,
+    create: true,
+  });
 
-    await resp.body?.pipeTo(f.writable)
+  await resp.body?.pipeTo(f.writable);
 
-    await Deno.chmod(bin_target_path, 0o755)
+  await Deno.chmod(bin_target_path, 0o755);
 }
 
 export async function runCargoInstall() {
-    try {
-        const cmd = new Deno.Command("cargo", {
-            args: ["install", "--bin=kottoc", `--git=${KOTTO_REPO}`]
-        })
-        if (!(await cmd.spawn().status).success) {
-            error("cargo seems to have exited unsuccessfully, things may not work as expected")
-        }
-    } catch (e) {
-        if (e instanceof Deno.errors.NotFound) {
-            error("couldn't find a Rust toolchain")
-            error("read more here: https://www.rust-lang.org/tools/install")
-        }
-        throw e
+  try {
+    const cmd = new Deno.Command("cargo", {
+      args: ["install", "--bin=kottoc", `--git=${KOTTO_REPO}`],
+    });
+    if (!(await cmd.spawn().status).success) {
+      error(
+        "cargo seems to have exited unsuccessfully, things may not work as expected",
+      );
     }
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      error("couldn't find a Rust toolchain");
+      error("read more here: https://www.rust-lang.org/tools/install");
+    }
+    throw e;
+  }
 }
 
 async function doBootstrap() {
-    error("could not find kottoc (a required Rust companion binary)")
+  error("could not find kottoc (a required Rust companion binary)");
 
-    if (ask("Do you want to build kottoc from source now?") != "yes")
-        return
+  if (ask("Do you want to build kottoc from source now?") != "yes") {
+    return;
+  }
 
-    await runCargoInstall()
+  await runCargoInstall();
 
-    if(await isAvailable()) {
-        info("ready to run 🎉")
-    } else {
-        error("Couldn't make sure kottoc is available: is it in your $PATH?")
-        error("Try running:")
-        error("    export PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH")
-    }
+  if (await isAvailable()) {
+    info("ready to run 🎉");
+  } else {
+    error("Couldn't make sure kottoc is available: is it in your $PATH?");
+    error("Try running:");
+    error("    export PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH");
+  }
 }
 
 async function ensurePermissionsToRun(params?: RunParameters) {
-    const permissions: Deno.PermissionDescriptor[] = [{
-        name: "run",
-        command: "kottoc"
-    }, {
-        name: "net",
-        host: "api.openai.com"
-    }, {
-        name: "net",
-        host: "kotto.land"
-    }, {
-        name: "read",
-        path: "./"
-    }, {
-        name: "write",
-        path: "./"
-    }, {
-        name: "env",
-        variable: "OPENAI_KEY"
-    }]
+  const permissions: Deno.PermissionDescriptor[] = [{
+    name: "run",
+    command: "kottoc",
+  }, {
+    name: "net",
+    host: "api.openai.com",
+  }, {
+    name: "net",
+    host: "kotto.land",
+  }, {
+    name: "read",
+    path: "./",
+  }, {
+    name: "write",
+    path: "./",
+  }, {
+    name: "env",
+    variable: "OPENAI_KEY",
+  }];
 
-    const should_prompt = params?.should_prompt || true
+  const should_prompt = params?.should_prompt || true;
 
-    let missing_perms = false
-    for (const permission of permissions) {
-        const permission_status = await Deno.permissions.query(permission)
-        missing_perms = missing_perms || permission_status.state != "granted"
-    }
+  let missing_perms = false;
+  for (const permission of permissions) {
+    const permission_status = await Deno.permissions.query(permission);
+    missing_perms = missing_perms || permission_status.state != "granted";
+  }
 
-    if (missing_perms && should_prompt) {
-        info("we need to run with the following permissions:")
-        info(`  ${colors.bold("run")}        : to run kottoc, a companion native binary which generates prompt files`)
-        info(`  ${colors.bold("read/write")} : to manipulate prompt files generated by kottoc`)
-        info(`  ${colors.bold("env")}        : to read the value of the OPENAI_KEY environment variable`)
-        info(`  ${colors.bold("net")}        : to interact with OpenAI's API`)
-        await grantOrThrow(permissions)
-    }
+  if (missing_perms && should_prompt) {
+    info("we need to run with the following permissions:");
+    info(
+      `  ${
+        colors.bold("run")
+      }        : to run kottoc, a companion native binary which generates prompt files`,
+    );
+    info(
+      `  ${
+        colors.bold("read/write")
+      } : to manipulate prompt files generated by kottoc`,
+    );
+    info(
+      `  ${
+        colors.bold("env")
+      }        : to read the value of the OPENAI_KEY environment variable`,
+    );
+    info(`  ${colors.bold("net")}        : to interact with OpenAI's API`);
+    await grantOrThrow(permissions);
+  }
 }
 
 async function havePermissionsToRun(params?: RunParameters): Promise<boolean> {
-    return ensurePermissionsToRun(params).then(() => true).catch(() => false)
+  return ensurePermissionsToRun(params).then(() => true).catch(() => false);
 }
 
 async function isAvailable(params?: RunParameters): Promise<boolean> {
-    let child
+  let child;
 
-    try {
-        child = runRust({ exec: params?.exec })
-    } catch (e) {
-        if (e instanceof Deno.errors.NotFound) {
-            return false
-        } else {
-            throw e
-        }
+  try {
+    child = runRust({ exec: params?.exec });
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      return false;
+    } else {
+      throw e;
     }
+  }
 
-    return child?.status?.then((status) => status.success) || false
+  return child?.status?.then((status) => status.success) || false;
 }

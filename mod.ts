@@ -1,86 +1,101 @@
-import { Prompts, Scope } from "./prompts.ts"
-import { Naive, Template } from "./const.ts"
+import { Prompts, Scope } from "./prompts.ts";
+import { Naive, Template } from "./const.ts";
 
-import * as log from "./log.ts"
-import * as llm from "./llm.ts"
+import * as log from "./log.ts";
+import * as llm from "./llm.ts";
 
-import { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
-export { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
+import { Exit, Feedback, Interrupt, RuntimeError } from "./errors.ts";
+export { Exit, Feedback, Interrupt, RuntimeError } from "./errors.ts";
 
 export type AgentOptions = {
-    argv: string[]
-}
+  argv: string[];
+};
 
 /**
  * Set the log level.
  */
-export const setLogLevel = log.setLogLevel
+export const setLogLevel = log.setLogLevel;
 
 /**
  * Get the current log level.
  */
-export const getLogLevel = log.getLogLevel
+export const getLogLevel = log.getLogLevel;
 
-const logger = log.logger
+const logger = log.logger;
 
 export type FunctionCall = {
-    name: string,
-    reasoning?: string,
-    arguments: any[]
-}
+  name: string;
+  reasoning?: string;
+  arguments: any[];
+};
 
 type ExportDescriptor = {
-    property_key: string,
-    adder: (scope: Scope) => void,
-    description?: string
-}
+  property_key: string;
+  adder: (scope: Scope) => void;
+  description?: string;
+};
 
 class ExportsMap {
-    #inner: Map<string, ExportDescriptor> = new Map()
+  #inner: Map<string, ExportDescriptor> = new Map();
 
-    get(property_key: string): ExportDescriptor | undefined {
-        return this.#inner.get(property_key);
-    }
+  get(property_key: string): ExportDescriptor | undefined {
+    return this.#inner.get(property_key);
+  }
 
-    insert(property_key: string, descriptor: ExportDescriptor) {
-        this.#inner.set(property_key, descriptor)
-    }
+  insert(property_key: string, descriptor: ExportDescriptor) {
+    this.#inner.set(property_key, descriptor);
+  }
 
-    forEach(fn: (_: ExportDescriptor) => void) {
-        this.#inner.forEach(fn)
-    }
+  forEach(fn: (_: ExportDescriptor) => void) {
+    this.#inner.forEach(fn);
+  }
 }
 
-type ConstructorDecorator = <T extends { new (...args: any[]): {} } >(constructor: T) => any
+type ConstructorDecorator = <T extends { new (...args: any[]): {} }>(
+  constructor: T,
+) => any;
 
-type MethodDecorator = (target: any, property_key: string, descriptor: PropertyDescriptor) => void
+type MethodDecorator = (
+  target: any,
+  property_key: string,
+  descriptor: PropertyDescriptor,
+) => void;
 
 const description = (task: string) => {
-    return <T extends { new (...args: any[]): {} } >(constructor: T) => {
-        constructor.prototype.task = task
-    }
-}
+  return <T extends { new (...args: any[]): {} }>(constructor: T) => {
+    constructor.prototype.task = task;
+  };
+};
 
 const prompts = (prompts: string) => {
-    return <T extends { new (...args: any[]): {} } >(constructor: T) => {
-        constructor.prototype.prompts = prompts
-    }
-}
+  return <T extends { new (...args: any[]): {} }>(constructor: T) => {
+    constructor.prototype.prompts = prompts;
+  };
+};
 
-export const use: MethodDecorator = (target: any, property_key: string, _descriptor?: PropertyDescriptor) => {
-    if (target.exports === undefined) {
-        target.exports = new Map()
-    }
-    target.exports.set(property_key, {
-        property_key,
-        adder: (scope: Scope) => scope.addFromId("method_decl", Scope.ident(target.constructor.name), Scope.ident(property_key))
-    })
-}
+export const use: MethodDecorator = (
+  target: any,
+  property_key: string,
+  _descriptor?: PropertyDescriptor,
+) => {
+  if (target.exports === undefined) {
+    target.exports = new Map();
+  }
+  target.exports.set(property_key, {
+    property_key,
+    adder: (scope: Scope) =>
+      scope.addFromId(
+        "method_decl",
+        Scope.ident(target.constructor.name),
+        Scope.ident(property_key),
+      ),
+  });
+};
 
 type Action = {
-    call: FunctionCall,
-    output?: object
-}
+  call: FunctionCall;
+  output?: object;
+};
 
 /**
  * An agent is a class that has at least one @use decorated method.
@@ -88,24 +103,24 @@ type Action = {
  * You can run agents with [[run]] or [[runOnce]].
  */
 export interface Agent {
-    [functions: string]: any;
+  [functions: string]: any;
 }
 
 export type Exited = {
-    output: any
-}
+  output: any;
+};
 
 export function isExited(pending: Exited | Pending): pending is Exited {
-    return "output" in pending
+  return "output" in pending;
 }
 
 export type Pending = {
-    role: "user" | "system"
-    prompt?: string
-}
+  role: "user" | "system";
+  prompt?: string;
+};
 
 export function isPending(exited: Exited | Pending): exited is Pending {
-    return "prompt" in exited
+  return "prompt" in exited;
 }
 
 /**
@@ -114,136 +129,139 @@ export function isPending(exited: Exited | Pending): exited is Pending {
  * You can run agents with [[run]] or [[runOnce]].
  */
 export class AgentController {
-    agent: Agent
+  agent: Agent;
 
-    prompts: Prompts
+  prompts: Prompts;
 
-    exports: ExportsMap
+  exports: ExportsMap;
 
-    llm: llm.LLM
+  llm: llm.LLM;
 
-    template: Template
+  template: Template;
 
-    history: Action[] = []
+  history: Action[] = [];
 
-    constructor(agent: Agent, prompts: Prompts, llm: llm.LLM) {
-        this.agent = agent
+  constructor(agent: Agent, prompts: Prompts, llm: llm.LLM) {
+    this.agent = agent;
 
-        this.prompts = prompts
+    this.prompts = prompts;
 
-        this.exports = agent.exports || new ExportsMap()
+    this.exports = agent.exports || new ExportsMap();
 
-        this.llm = llm
+    this.llm = llm;
 
-        this.template = agent.template || Naive
+    this.template = agent.template || Naive;
+  }
+
+  renderContext(): string {
+    const scope = this.prompts.newScope();
+
+    this.exports.forEach(({ property_key, adder }) => {
+      logger.trace(`adding '${property_key}' to scope`);
+      adder(scope);
+    });
+
+    return this.template.renderContext(scope);
+  }
+
+  async doAction(action: Action) {
+    const exports = this.agent.exports;
+
+    const export_descriptor = exports.get(action.call.name);
+
+    if (export_descriptor === undefined) {
+      throw new TypeError(`${action.call.name} is not a function`);
     }
 
-    renderContext(): string {
-        const scope = this.prompts.newScope()
+    const call_name = export_descriptor.property_key;
 
-        this.exports.forEach(({ property_key, adder }) => {
-            logger.trace(`adding '${property_key}' to scope`)
-            adder(scope)
-        })
-
-        return this.template.renderContext(scope)
+    if (typeof this.agent[call_name] !== "function") {
+      throw new TypeError(`${action.call.name} is not a function`);
     }
 
-    async doAction(action: Action) {
-        const exports = this.agent.exports
+    const args = action.call.arguments;
 
-        const export_descriptor = exports.get(action.call.name)
-        
-        if (export_descriptor === undefined) {
-            throw new TypeError(`${action.call.name} is not a function`)
-        }
+    logger.calls(call_name, args);
+    const output = await (this.agent[call_name])(...args);
+    logger.returns(output);
 
-        const call_name = export_descriptor.property_key
-        
-        if (typeof this.agent[call_name] !== "function") {
-            throw new TypeError(`${action.call.name} is not a function`)
-        }
+    action.output = output;
+    this.history.push(action);
+    return;
+  }
 
-        const args = action.call.arguments
+  async tick(
+    { prompt, role }: Pending = { role: "user" },
+  ): Promise<Exited | Pending> {
+    try {
+      await this.complete(prompt, role);
+      return {
+        role: "user",
+      };
+    } catch (err) {
+      // TODO backoff
+      if (err instanceof Feedback) {
+        logger.feedback(err);
+        return {
+          prompt: err.message,
+          role: "system",
+        };
+      } else if (err instanceof Interrupt) {
+        logger.interrupt(err);
+        throw err.value;
+      } else if (err instanceof RuntimeError) {
+        throw err;
+      } else if (err instanceof Exit) {
+        logger.exit(err);
+        return {
+          output: err.value,
+        };
+      } else {
+        logger.error(err);
+        return {
+          role: "system",
+          prompt: this.template.renderError(err),
+        };
+      }
+    }
+  }
 
-        logger.calls(call_name, args)
-        const output = await (this.agent[call_name])(...args)
-        logger.returns(output)
-
-        action.output = output
-        this.history.push(action)
-        return
+  async complete(prompt?: string, role: "user" | "system" = "system") {
+    if (prompt === undefined) {
+      if (this.history.length == 0) {
+        prompt = this.renderContext();
+      } else {
+        const last = this.history[this.history.length - 1];
+        prompt = this.template.renderOutput(last.output);
+      }
     }
 
-    async tick({ prompt, role }: Pending = { role: "user" }): Promise<Exited | Pending> {
-        try {
-            await this.complete(prompt, role)
-            return {
-                role: "user"
-            }
-        }
-        catch (err) {
-            // TODO backoff
-            if (err instanceof Feedback) {
-                logger.feedback(err)
-                return {
-                    prompt: err.message,
-                    role: "system"
-                }
-            } else if (err instanceof Interrupt) {
-                logger.interrupt(err)
-                throw err.value
-            } else if (err instanceof RuntimeError) {
-                throw err
-            } else if (err instanceof Exit) {
-                logger.exit(err)
-                return {
-                    output: err.value
-                }
-            } else {
-                logger.error(err)
-                return {
-                    role: "system",
-                    prompt: this.template.renderError(err)
-                }
-            }
-        }
+    const completion = await this.llm.complete([{
+      "role": role,
+      "content": prompt,
+    }]);
+
+    let response;
+    try {
+      response = this.template.parseResponse(completion);
+    } catch (_) {
+      throw new Feedback(
+        `could not extract JSON from your response: ${completion}`,
+      );
     }
 
-    async complete(prompt?: string, role: "user" | "system" = "system") {
-        if (prompt === undefined) {
-            if (this.history.length == 0) {
-                prompt = this.renderContext()
-            } else {
-                const last = this.history[this.history.length - 1]
-                prompt = this.template.renderOutput(last.output)
-            }
-        }
+    logger.thought(response.reasoning || "(no reasoning given)");
 
-        const completion = await this.llm.complete([{
-            "role": role,
-            "content": prompt
-        }])
+    await this.doAction({ call: response });
+  }
 
-        let response
-        try {
-            response = this.template.parseResponse(completion)
-        } catch (_) {
-            throw new Feedback(`could not extract JSON from your response: ${completion}`)
-        }
-
-        logger.thought(response.reasoning || "(no reasoning given)")
-
-        await this.doAction({ call: response })
+  async runToCompletion(): Promise<any> {
+    let tick = undefined;
+    while (true) {
+      tick = await this.tick(tick);
+      if (isExited(tick)) {
+        return tick.output;
+      }
     }
-
-    async runToCompletion(): Promise<any> {
-        let tick = undefined
-        while (true) {
-            tick = await this.tick(tick)
-            if (isExited(tick)) {
-                return tick.output
-            }
-        }
-    }
+  }
 }
