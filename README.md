@@ -1,25 +1,51 @@
 <h1 align="center">
-  :robot: kotto
+  kotto
 </h1>
 
-<br/>
-
 <p align="center">
-<b>An agent framework that tells LLMs how to use your code</b>
+  <i align="center">An agent framework that tells LLMs how to use your code :robot:</i>
 </p>
 
 <br/>
 
-<div align="center">
+<p align="center">
   <a href="https://snappify.com/view/7439fa7d-84d0-4284-b641-739242eb7ea1?autoplay=1">
-    <img src="https://kotto.land/static/hello.png?" width="700"/>
+    <img src="https://kotto.land/static/type-is-context-round.png" width="100%"/>
   </a>
-</div>
-<div align="center">
+</p>
+
+<p align="center">
   <a href="https://snappify.com/view/7439fa7d-84d0-4284-b641-739242eb7ea1?autoplay=1">
-    Animated Demo
+    Check out the animated demo.
   </a>
-</div>
+</p>
+
+## Introduction
+
+`kotto` is an agent framework that statically builds context-efficient prompts from plain JavaScript/TypeScript, exporting your code so it can be consumed at runtime by popular large 
+language models (LLMs).
+
+This allows you to develop any app that uses LLMs without ever doing manual prompting and, instead, leverage the type system and JSDoc strings as context to inform model predictions. And go from zero to agent in under a minute (check out the [Hello, World!](#hello-im-a-javascript-runtime))!
+
+### Why Kotto?
+- 🤖 No manual prompting
+- 🚀 Dead simple to use
+- ⚡️ Great for serverless environments like [Deno Deploy](https://deno.com/deploy)
+- 🚶‍ Step-by-step debugging, with introspection
+- 🦕 Built for Deno, with Rust 🦀
+
+### Progress
+
+- [x] Prompts from class methods.
+- [x] Trace logging and debug mode.
+- [x] Customize generated prompts.
+- [x] Self-exit.
+- [x] Send system messages for feedback.
+- [ ] Prompts from class attributes/fields.
+- [ ] Builtin types (e.g. Request/Response).
+- [ ] Builtin functions (e.g. fetch, Deno namespace).
+- [ ] Reinject context for extended sessions.
+- [ ] Support more LLM providers.
 
 <br/>
 
@@ -55,21 +81,26 @@
 ### Requirements
 
 kotto is built on top of [Deno](https://deno.land/), a secure runtime for JavaScript and TypeScript. You'll need to
-install it to run kotto agents. Use the [official guide](https://deno.land/manual/getting_started/installation) to get 
-started.
+install it to run kotto agents. Use the [official guide](https://deno.land/manual/getting_started/installation) to get started.
 
 kotto also uses [OpenAI's API](https://platform.openai.com/docs/introduction) as the only supported LLM backend is 
-gpt-3.5 (more to come soon!). So you'll need an OpenAI API key. You can generate one [over here](https://platform.openai.com/account/api-keys).
+gpt-3.5 (more coming soon!). So you'll need an OpenAI API key. You can generate one [over here](https://platform.openai.com/account/api-keys).
 
 ### Installation
 
 Install the kotto CLI
 
 ```bash
-curl -fsSL https://kotto.land/install.sh | sh
+deno install -A -n kotto https://kotto.land/cli.ts
 ```
 
-set your OpenAI API key
+and install [kottoc](./kottoc) (a Rust companion that generates prompts):
+
+```bash
+kotto upgrade
+```
+
+Set your OpenAI API key
 
 ```bash
 kotto config openai.key MY_SECRET_KEY
@@ -83,7 +114,7 @@ kotto run https://kotto.land/examples/hello.ts
 
 ### Hello, I'm a JavaScript runtime.
 
-Create a file `hello.ts` and lay down the skeleton of a class:
+Let's our own agent from scratch. Create a file `hello.ts` and lay down the skeleton of a class:
 
 ```typescript
 import { use } from "https://kotto.land/mod.ts"
@@ -98,7 +129,7 @@ class Hello {
 export default () => new Hello()
 ```
 
-Note the kotto `@use` decorator: this is the key to exposing the hello method to the LLM backend.
+Note the `@use` decorator: this is the key to exposing the `hello` method to the LLM backend.
 
 Now run the agent:
 
@@ -109,9 +140,9 @@ Hello, World!
 
 Under the hood, kotto has statically generated a prompt set that includes the type signature of the `hello`. The model 
 then predicts that it needs to call the function with the argument `"Hello, World!"`. And that message gets written to 
-stdout.
+stdout because of the `console.log` line.
 
-We can also use comments to tell the model a bit more about what we want:
+We can also use comments to tell the model a bit more about what we want. Let's ask it to speak [High Valyrian](https://gameofthrones.fandom.com/wiki/High_Valyrian):
 
 ```typescript
 import { use } from "https://kotto.land/mod.ts"
@@ -134,19 +165,20 @@ $ kotto run hello.ts
 Valar Morghulis!
 ```
 
-We can get a bit more insight into what's going on by tuning up the log level:
+We can get a bit more insight into what's going on by running the agent in debug mode:
 
 ```text
 $ kotto debug hello.ts
 trace: adding 'hello' to scope 
-trace:     ╭ Since the program states that the function 'hello' should be called with a message 
-             in High Valyrian, I will call this function to pass the appropriate message to it.
+trace:     ╭ Since the program states that the function 'hello' should be called with 
+             a message in High Valyrian, I will call this function to pass the appropriate 
+             message to it.
 trace:  call hello("Valar morghulis")
 Valar morghulis
 trace:     ⮑  returns null
-trace:     ╭ After executing the 'hello' function, the code does not have any more instructions 
-             to execute. Therefore, I should call the 'builtins.exit' function to gracefully terminate 
-             the program.
+trace:     ╭ After executing the 'hello' function, the code does not have any more 
+             instructions to execute. Therefore, I should call the 'builtins.exit' function
+             to gracefully terminate the program.
 trace:  exit null
 ```
 
