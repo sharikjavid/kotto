@@ -81,7 +81,8 @@ This allows you to develop any app that uses LLMs without ever doing manual prom
 ### Requirements
 
 kotto is built on top of [Deno](https://deno.land/), a secure runtime for JavaScript and TypeScript. You'll need to
-install it to run kotto agents. Use the [official guide](https://deno.land/manual/getting_started/installation) to get started.
+install it to run kotto agents. Use the [official guide](https://deno.land/manual/getting_started/installation) to get started. You'll also need a Rust toolchain to build
+[kottoc](./kottoc), a companion binary built on top of [swc](https://github.com/swc-project/swc), to generate the prompts.
 
 kotto also uses [OpenAI's API](https://platform.openai.com/docs/introduction) as the only supported LLM backend is 
 gpt-3.5 (more coming soon!). So you'll need an OpenAI API key. You can generate one [over here](https://platform.openai.com/account/api-keys).
@@ -114,7 +115,7 @@ kotto run https://kotto.land/examples/hello.ts
 
 ### Hello, I'm a JavaScript runtime.
 
-Let's our own agent from scratch. Create a file `hello.ts` and lay down the skeleton of a class:
+Let's build our own agent from scratch. Create a file `hello.ts` and lay down the skeleton of a class:
 
 ```typescript
 import { use } from "https://kotto.land/mod.ts"

@@ -19,8 +19,8 @@ const SEMVER = "0.1.0";
 
 const HELP = `Let your code chat with LLMs
 
-Docs: https://kotto.land/docs
-Tutorial: https://github.com/brokad/kotto#tutorial
+Docs: https://github.com/brokad/kotto#books-documentation
+Tutorial: https://github.com/brokad/kotto#hello-im-a-javascript-runtime
 Bugs: https://github.com/brokad/kotto/issues
 
 To run an agent:
