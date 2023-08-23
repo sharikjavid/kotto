@@ -86,13 +86,12 @@ kotto run https://kotto.land/examples/hello.ts
 Create a file `hello.ts` and lay down the skeleton of a class:
 
 ```typescript
-import { use, Exit } from "https://kotto.land/mod.ts"
+import { use } from "https://kotto.land/mod.ts"
 
 class Hello {
     @use
     hello(message: string) {
         console.log(message)
-        throw new Exit()
     }
 }
 
@@ -115,14 +114,13 @@ stdout.
 We can also use comments to tell the model a bit more about what we want:
 
 ```typescript
-import { use, Exit } from "https://kotto.land/mod.ts"
+import { use } from "https://kotto.land/mod.ts"
 
 class Hello {
     @use
     // This function should be called with a message in High Valyrian
     hello(message: string) {
         console.log(message)
-        throw new Exit()
     }
 }
 
@@ -141,15 +139,23 @@ We can get a bit more insight into what's going on by tuning up the log level:
 ```text
 $ kotto debug hello.ts
 trace: adding 'hello' to scope 
-trace:     ╭ Since the program states that the function 'hello' should be called with a message in High Valyrian, 
-             I will call this function to pass the appropriate message to it.
+trace:     ╭ Since the program states that the function 'hello' should be called with a message 
+             in High Valyrian, I will call this function to pass the appropriate message to it.
 trace:  call hello("Valar morghulis")
 Valar morghulis
+trace:     ⮑  returns null
+trace:     ╭ After executing the 'hello' function, the code does not have any more instructions 
+             to execute. Therefore, I should call the 'builtins.exit' function to gracefully terminate 
+             the program.
 trace:  exit null
 ```
 
 This will display a trace log of actions taken by the LLM along with (in dimmed text) the model's explanation for the
 choice.
+
+Note that, by default, the model is given a `builtins.exit` function to call when it predicts it is done. This behaviour
+can be overridden by giving `kotto run` the `--no-exit` flag. You will then have to terminate the agent by throwing 
+an [`Exit` exception](#exit) (the next example shows how to do that).
 
 ### Type is context
 
@@ -171,12 +177,16 @@ class Hello {
 export default () => new Hello()
 ```
 
-Because `message` now has a union type, it will be called only with one of the three stated options. Let's run it again:
+Because `message` now has a union type, it will be called only with one of the three stated options: "happy", 
+"neutral" or "sad". Let's run it again:
 
 ```bash
 $ kotto run hello.ts
 I am feeling happy today.
 ```
+
+With no additional context, the model has no choice but to hallucinate a feeling - which tends to be happy. Also note 
+the `throw new Exit()` line, which terminates the agent after the first call to `hello`.
 
 We can also use custom/nested types to document even more context:
 
@@ -203,7 +213,8 @@ class Hello {
 export default () => new Hello()
 ```
 
-kotto automatically adds type declarations (here, the `Feeling` type) to the internal prompt set.
+Kotto automatically adds type declarations (here, the `Feeling` type) and their documentation comments to the internal 
+prompt set.
 
 ```bash
 $ kotto run hello.ts
@@ -433,7 +444,7 @@ orchestrator between your code and the LLM backend.
 
 ## Contributing
 
-kotto is 100% a community effort to make LLM chains easy to build and use. And I'm so grateful you're willing to
+Kotto is 100% a community effort to make LLM chains easy to build and use. And I'm so grateful you're willing to
 help!
 
 If you have found a bug or have a suggestion for a feature you'd like, open
