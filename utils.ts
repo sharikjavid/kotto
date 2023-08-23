@@ -1,7 +1,4 @@
-import * as colors from "https://deno.land/std@0.198.0/fmt/colors.ts"
-import * as path from "https://deno.land/std@0.198.0/path/mod.ts"
-import * as fs from "https://deno.land/std@0.198.0/fs/mod.ts"
-import { grantOrThrow } from "https://deno.land/std@0.198.0/permissions/mod.ts"
+import { grantOrThrow, colors, join, dirname, ensureDir } from "./deps.ts"
 
 import { error, info } from "./log.ts"
 import { runRust, type RunParameters } from "./prompts.ts"
@@ -47,10 +44,10 @@ async function donwloadLatestRelease() {
 
     if (home === undefined) throw new Error("could not locate home")
 
-    const bin_target_path = path.join(home, ".local/bin/kottoc")
-    const bin_target_dir = path.dirname(bin_target_path)
+    const bin_target_path = join(home, ".local/bin/kottoc")
+    const bin_target_dir = dirname(bin_target_path)
 
-    await fs.ensureDir(bin_target_dir)
+    await ensureDir(bin_target_dir)
 
     const resp = await fetch(new Request(github_bin_url, {
         redirect: "follow"

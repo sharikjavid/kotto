@@ -1,10 +1,10 @@
 import { Prompts, Scope } from "./prompts.ts"
 import { Naive, Template } from "./const.ts"
 
-import * as errors from "./errors.ts"
 import * as log from "./log.ts"
 import * as llm from "./llm.ts"
 
+import { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
 export { RuntimeError, Interrupt, Feedback, Exit } from "./errors.ts"
 
 export type AgentOptions = {
@@ -23,7 +23,7 @@ export const getLogLevel = log.getLogLevel
 
 const logger = log.logger
 
-type FunctionCall = {
+export type FunctionCall = {
     name: string,
     reasoning?: string,
     arguments: any[]
@@ -39,7 +39,7 @@ class ExportsMap {
     #inner: Map<string, ExportDescriptor> = new Map()
 
     get(property_key: string): ExportDescriptor | undefined {
-        return this.#inner.get(property_key)
+        return this.#inner.get(property_key);
     }
 
     insert(property_key: string, descriptor: ExportDescriptor) {
@@ -184,18 +184,18 @@ export class AgentController {
         }
         catch (err) {
             // TODO backoff
-            if (err instanceof errors.Feedback) {
+            if (err instanceof Feedback) {
                 logger.feedback(err)
                 return {
                     prompt: err.message,
                     role: "system"
                 }
-            } else if (err instanceof errors.Interrupt) {
+            } else if (err instanceof Interrupt) {
                 logger.interrupt(err)
                 throw err.value
-            } else if (err instanceof errors.RuntimeError) {
+            } else if (err instanceof RuntimeError) {
                 throw err
-            } else if (err instanceof errors.Exit) {
+            } else if (err instanceof Exit) {
                 logger.exit(err)
                 return {
                     output: err.value
@@ -229,7 +229,7 @@ export class AgentController {
         try {
             response = this.template.parseResponse(completion)
         } catch (_) {
-            throw new errors.Feedback(`could not extract JSON from your response: ${completion}`)
+            throw new Feedback(`could not extract JSON from your response: ${completion}`)
         }
 
         logger.thought(response.reasoning || "(no reasoning given)")

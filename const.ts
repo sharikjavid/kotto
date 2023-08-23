@@ -1,6 +1,5 @@
 import { Scope } from "./prompts.ts"
 import { FunctionCall } from "./mod.ts"
-import {Feedback, RuntimeError} from "./errors.ts";
 
 /**
  * Wrap around the string with md-style block quotes

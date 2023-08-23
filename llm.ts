@@ -1,4 +1,9 @@
-import { ChatCompletionRequestMessage, CreateChatCompletionRequest, Configuration, OpenAIApi } from "npm:openai@^3.3.0"
+import {
+    ChatCompletionRequestMessage,
+    type CreateChatCompletionRequest,
+    Configuration,
+    OpenAIApi
+} from "./deps.ts"
 
 import * as errors from "./errors.ts"
 
