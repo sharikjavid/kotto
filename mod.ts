@@ -1,3 +1,5 @@
+import { toFileUrl, resolve } from "./deps.ts"
+
 import { Prompts, Scope } from "./prompts.ts";
 import { Naive, Template } from "./const.ts";
 
@@ -304,4 +306,56 @@ export class AgentController {
       }
     }
   }
+}
+
+export function urlFromModuleSpecifier(module_specifier: string): URL {
+  try {
+    return new URL(module_specifier);
+  } catch (_) {
+    return toFileUrl(resolve(module_specifier));
+  }
+}
+
+export type BuildFlags = {
+  // URL to the module to build into prompts
+  source_url: URL;
+  // Local directory where the output (prompts) will be written
+  work_dir?: string;
+}
+
+export function buildPrompts({ source_url, work_dir }: BuildFlags): Promise<URL> {
+  return Prompts.build(source_url, { work_dir });
+}
+
+export type ControllerFlags<O> = {
+  // The module to run
+  source_url: URL;
+  // The prompts to use
+  prompts: Prompts;
+  // The OpenAI key to use
+  openai_key: string;
+  // The options to pass to the agent
+  agent_options: O;
+  // Whether to expose `builtins.exit` to the agent
+  allow_exit?: boolean;
+};
+
+export async function makeController<O>(opts: ControllerFlags<O>): Promise<AgentController> {
+  const mod = await import(opts.source_url.href);
+
+  if (mod.default === undefined) {
+    throw new RuntimeError(`module does not have a default export
+
+try adding:
+
+  export default () => new MyAgent()`);
+  }
+
+  const agent = await mod.default(opts.agent_options);
+
+  const model = new llm.OpenAIChatCompletion(opts.openai_key);
+
+  return new AgentController(agent, opts.prompts, model, {
+    allow_exit: opts.allow_exit,
+  });
 }

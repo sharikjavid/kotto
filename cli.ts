@@ -10,8 +10,7 @@ import {
 
 import { Prompts } from "./prompts.ts";
 import { RuntimeError } from "./errors.ts";
-import { AgentController } from "./mod.ts";
-import { OpenAIChatCompletion } from "./llm.ts";
+import {buildPrompts, makeController, urlFromModuleSpecifier} from "./mod.ts";
 import { runCargoInstall } from "./utils.ts";
 import * as log from "./log.ts";
 
@@ -40,6 +39,7 @@ Usage: kotto [OPTIONS] [COMMAND]
 Commands:
   run          Run an agent
   debug        Run an agent in debug mode
+  build        Build prompts for a module
   config       Set configuration options
   upgrade      Upgrade kotto
   help         Show this help message
@@ -53,7 +53,7 @@ const HELP_RUN = `Run an agent
 
 To run an agent:
 
-    kotto run https://kotto.land/agents/hello.ts
+    kotto run https://kotto.land/examples/hello.ts
 
 Usage: kotto run [OPTIONS] PATH [--] [ARGS...]
 
@@ -63,6 +63,7 @@ Arguments:
 
 Options:
     --trace      Enable trace logging
+    --prompts    Path to prompts to use (if empty, will be built using sane defaults)
     --no-exit    Do not allow the agent to call exit by itself
 `;
 
@@ -70,7 +71,7 @@ const HELP_DEBUG = `Run an agent in debug mode
 
 To run an agent in debug mode:
 
-    kotto debug https://kotto.land/agents/hello.ts
+    kotto debug https://kotto.land/examples/hello.ts
 
 Usage: kotto debug [OPTIONS] PATH
 
@@ -79,6 +80,22 @@ Arguments:
     
 Options:
     --no-exit    Do not allow the agent to call exit by itself
+    --prompts    Path to prompts to use (if empty, will be built using sane defaults)
+`;
+
+const HELP_BUILD = `Build prompts for an agent
+
+To build prompts for an agent:
+
+    kotto build https://kotto.land/examples/hello.ts
+    
+Usage: kotto build [OPTIONS] PATH
+
+Arguments:
+    PATH         Path to the source (.ts) to build prompts for
+    
+Options:
+    --work-dir   Directory to write the prompts file to (defaults to current directory)
 `;
 
 const HELP_CONFIG = `Set configuration options
@@ -126,6 +143,9 @@ function renderHelp(command?: string, includeDesc = true) {
     case "config":
       help = HELP_CONFIG;
       break;
+    case "build":
+      help = HELP_BUILD;
+      break;
     case "upgrade":
       help = HELP_UPGRADE;
       break;
@@ -138,13 +158,13 @@ function renderHelp(command?: string, includeDesc = true) {
 
 type RunFlags = {
   path: string;
+  prompts?: string;
   trace: boolean;
   allow_exit: boolean;
   is_debug: boolean;
-  openai_key: string;
 };
 
-export async function doRun(args: RunFlags): Promise<any> {
+async function doRun(args: RunFlags) {
   log.setLogLevel(args.trace ? "trace" : "quiet");
 
   const config = await getConfig();
@@ -158,44 +178,57 @@ try running:
     kotto config openai.key KEY`);
   }
 
-  const llm = new OpenAIChatCompletion(openai_key);
+  const source_url = urlFromModuleSpecifier(args.path);
 
-  const temp_dir = await Deno.makeTempDir({
-    prefix: "kotto-",
-  });
+  let prompts;
+  if (args.prompts === undefined) {
+    const temp_dir = await Deno.makeTempDir({
+      prefix: "kotto-",
+    });
 
-  let url;
-  try {
-    url = new URL(args.path);
-  } catch (_) {
-    url = toFileUrl(resolve(args.path));
+    const prompts_url = await buildPrompts({
+      source_url,
+      work_dir: temp_dir
+    });
+
+    prompts = await Prompts.fromBuiltUrl(prompts_url)
+
+    await Deno.remove(prompts_url)
+
+    // Note: ensure { recursive: true } is *not* passed to this; the prompts files should
+    // be deleted before we get here, otherwise this is an error.
+    await Deno.remove(temp_dir)
+  } else {
+    prompts = await Prompts.fromBuiltUrl(urlFromModuleSpecifier(args.prompts));
   }
 
-  const mod = await import(url.toString());
-
-  if (mod.default === undefined) {
-    throw new RuntimeError(`module does not have a default export
-
-try adding:
-
-  export default () => new MyAgent()`);
-  }
-
-  const agent = await mod.default({ argv: getUserArgs() });
-
-  const prompts = await Prompts.fromUrl(url, {
-    work_dir: temp_dir,
-  });
-
-  // Note: ensure { recursive: true } is *not* passed to this; the prompts files should
-  // be deleted before we get here, otherwise this is an error.
-  await Deno.remove(temp_dir);
-
-  const ctl = new AgentController(agent, prompts, llm, {
+  const ctl = await makeController({
+    source_url,
+    prompts,
+    openai_key,
+    agent_options: {
+      args: getUserArgs(),
+    },
     allow_exit: args.allow_exit,
   });
 
-  return await ctl.runToCompletion();
+  await ctl.runToCompletion();
+}
+
+type BuildFlags = {
+  path: string;
+  work_dir?: string;
+}
+
+async function doBuild(args: BuildFlags) {
+  const source_url = urlFromModuleSpecifier(args.path);
+
+  const prompts_url = await buildPrompts({
+    source_url,
+    work_dir: args.work_dir
+  });
+
+  console.log(prompts_url.href)
 }
 
 type Config = {
@@ -277,6 +310,7 @@ function unwind(err: ErrorExt) {
 async function main() {
   const args = flags.parse(Deno.args, {
     boolean: ["help", "trace", "version", "no-exit"],
+    string: ["prompts", "work-dir"],
   });
 
   if (args.version) {
@@ -305,12 +339,22 @@ async function main() {
       }
       await doRun({
         path: args._[1],
+        prompts: args.prompts,
         trace: args.trace || command == "debug",
         allow_exit: !args["no-exit"],
         is_debug: command == "debug",
-        openai_key: "", // TODO
       });
       break;
+    case "build":
+        if (typeof args._[1] !== "string") {
+          const help = renderHelp(command, false);
+          throw new RuntimeError(`${command} requires a PATH argument\n${help}`);
+        }
+        await doBuild({
+          path: args._[1],
+          work_dir: args["work-dir"],
+        });
+        break;
     case "config":
       if (typeof args._[1] !== "string" || typeof args._[2] !== "string") {
         const help = renderHelp(command, false);

@@ -59,40 +59,35 @@ export class Prompts {
     return new Prompts(mod);
   }
 
-  static async fromUrl(url: URL, opts: PromptOpts = {}): Promise<Prompts> {
+  static async fromBuiltUrl(import_url: URL): Promise<Prompts> {
+    return Prompts.fromModule(await import(import_url.href));
+  }
+
+  static async build(source_url: URL, opts: PromptOpts): Promise<URL> {
     const output_path = opts.work_dir || Deno.cwd();
 
-    const file_name = url.pathname.split("/").pop()!;
+    const file_name = source_url.pathname.split("/").pop()!;
 
     const output_name = `${file_name.split(".")[0]}.prompts.js`;
 
     const proc = runRust({
-      urls: [url],
+      urls: [source_url],
       output_path,
     });
 
     if (!(await proc?.status)?.success) {
       throw new RuntimeError(
-        `failed to generate prompts for ${url.toString()}`,
+          `failed to generate prompts for ${source_url.toString()}`,
       );
     }
 
-    const import_local_path = joinPath(output_path, output_name);
+    const local_import_path = joinPath(output_path, output_name);
     logger.trace(
-      "prompts",
-      `generated for ${url.toString()}, output: ${import_local_path}`,
+        "prompts",
+        `generated for ${source_url.toString()}, output: ${local_import_path}`,
     );
 
-    const import_path = toFileUrl(import_local_path).href;
-    const prompts = Prompts.fromModule(await import(import_path));
-
-    await Deno.remove(import_local_path);
-
-    return prompts;
-  }
-
-  static async fromPath(path: string, opts: PromptOpts = {}): Promise<Prompts> {
-    return Prompts.fromUrl(toFileUrl(path), opts);
+    return toFileUrl(local_import_path)
   }
 
   newScope(): Scope {
