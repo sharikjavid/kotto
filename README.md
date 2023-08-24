@@ -3,7 +3,7 @@
 </h1>
 
 <p align="center">
-  <i align="center">An agent framework that tells LLMs how to use your code :robot:</i>
+  <i align="center">An agent framework that tells LLMs how to use TypeScript :robot:</i>
 </p>
 
 <br/>
@@ -22,17 +22,16 @@
 
 ## Introduction
 
-`kotto` is an agent framework that statically builds context-efficient prompts from plain JavaScript/TypeScript, exporting your code so it can be consumed at runtime by popular large 
-language models (LLMs).
+`kotto` is an agent framework that statically builds context-efficient prompts from plain JavaScript/TypeScript, exporting your code, so it can be consumed at runtime by popular large language models (LLMs).
 
-This allows you to develop any app that uses LLMs without ever doing manual prompting and, instead, leverage the type system and JSDoc strings as context to inform model predictions. And go from zero to agent in under a minute (check out the [Hello, World!](#hello-im-a-javascript-runtime))!
+This allows you to develop apps that use LLMs without ever doing manual prompting and, instead, leverage the type system and JSDoc strings as context to inform model predictions. And go from zero to agent in under a minute (check out the [Hello, World!](#hello-im-a-javascript-runtime))!
 
 ### Why Kotto?
 - 🤖 No manual prompting
 - 🚀 Dead simple to use
 - ⚡️ Great for serverless environments like [Deno Deploy](https://deno.com/deploy)
 - 🚶‍ Step-by-step debugging, with introspection
-- 🦕 Built for Deno, with Rust 🦀
+- 🦕 Built for TypeScript, with Deno + Rust 🦀
 
 ### Progress
 
@@ -50,7 +49,7 @@ This allows you to develop any app that uses LLMs without ever doing manual prom
 <br/>
 
 > [!WARNING]
-> kotto is a very early stage project. Expect features and APIs to break frequently.
+> kotto is a very early stage project. It is in a usable state, but expect features and APIs to break frequently.
 
 <br/>
 
@@ -80,12 +79,11 @@ This allows you to develop any app that uses LLMs without ever doing manual prom
 
 ### Requirements
 
-kotto is built on top of [Deno](https://deno.land/), a secure runtime for JavaScript and TypeScript. You'll need to
-install it to run kotto agents. Use the [official guide](https://deno.land/manual/getting_started/installation) to get started. You'll also need a Rust toolchain to build
-[kottoc](./kottoc), a companion binary built on top of [swc](https://github.com/swc-project/swc), to generate the prompts.
+kotto is built on top of [Deno](https://deno.land/), a secure runtime for JavaScript and TypeScript. You'll need to install it to run kotto agents. Use the [official guide](https://deno.land/manual/getting_started/installation) to get started. 
 
-kotto also uses [OpenAI's API](https://platform.openai.com/docs/introduction) as the only supported LLM backend is 
-gpt-3.5 (more coming soon!). So you'll need an OpenAI API key. You can generate one [over here](https://platform.openai.com/account/api-keys).
+You'll also need a Rust toolchain to build [kottoc](./kottoc), a companion binary built on top of [swc](https://github.com/swc-project/swc), to generate the prompts. You can install Rust by following instructions [over here](https://www.rust-lang.org/tools/install). 
+
+kotto also uses [OpenAI's API](https://platform.openai.com/docs/introduction) as the only supported LLM backend is gpt-3.5 (more coming soon!). So you'll need an OpenAI API key. You can generate one [over here](https://platform.openai.com/account/api-keys).
 
 ### Installation
 
@@ -95,7 +93,7 @@ Install the kotto CLI
 deno install -A -n kotto https://kotto.land/cli.ts
 ```
 
-and install [kottoc](./kottoc) (a Rust companion that generates prompts):
+and install [kottoc](./kottoc) (a Rust companion that generates prompts) with:
 
 ```bash
 kotto upgrade
@@ -139,9 +137,9 @@ $ kotto run hello.ts
 Hello, World!
 ```
 
-Under the hood, kotto has statically generated a prompt set that includes the type signature of the `hello`. The model 
-then predicts that it needs to call the function with the argument `"Hello, World!"`. And that message gets written to 
-stdout because of the `console.log` line.
+Under the hood, kotto has statically generated a prompt set that includes the type signature of the `hello` method. The
+model then predicts that it needs to call the function with the argument `"Hello, World!"`. And that message gets written 
+to stdout because of the `console.log` line.
 
 We can also use comments to tell the model a bit more about what we want. Let's ask it to speak [High Valyrian](https://gameofthrones.fandom.com/wiki/High_Valyrian):
 
