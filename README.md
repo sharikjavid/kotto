@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://snappify.com/view/7439fa7d-84d0-4284-b641-739242eb7ea1?autoplay=1">
-    <img src="https://kotto.land/static/type-is-context-round.png" width="100%"/>
+    <img src="https://kotto.land/static/type-is-context-2-round.png" width="100%"/>
   </a>
 </p>
 

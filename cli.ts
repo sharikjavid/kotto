@@ -207,7 +207,7 @@ try running:
     prompts,
     openai_key,
     agent_options: {
-      args: getUserArgs(),
+      argv: getUserArgs(),
     },
     allow_exit: args.allow_exit,
   });
