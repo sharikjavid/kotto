@@ -55,7 +55,7 @@ export class Prompts {
     this.#mod = mod;
   }
 
-  static fromModule(mod: PromptsModule): Prompts {
+  static fromModule(mod: any): Prompts {
     return new Prompts(mod);
   }
 
@@ -88,6 +88,16 @@ export class Prompts {
     );
 
     return toFileUrl(local_import_path)
+  }
+
+  static async fromDefault(mod_url: string): Promise<Prompts> {
+    if (!mod_url.endsWith(".ts")) {
+      throw new RuntimeError(`expected path to a .ts, got ${mod_url}`);
+    }
+
+    mod_url = `${mod_url.slice(0, -3)}.prompts.js`;
+
+    return Prompts.fromModule(await import(mod_url));
   }
 
   newScope(): Scope {

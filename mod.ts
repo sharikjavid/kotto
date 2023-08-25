@@ -1,6 +1,8 @@
 import { toFileUrl, resolve } from "./deps.ts"
 
 import { Prompts, Scope } from "./prompts.ts";
+export { Prompts }
+
 import { Naive, Template } from "./const.ts";
 
 import * as log from "./log.ts";
@@ -149,6 +151,9 @@ export class AgentController {
 
   opts: AgentControllerOpts;
 
+  retries = 0;
+  max_retries = 5;
+
   constructor(
     agent: Agent,
     prompts: Prompts,
@@ -237,13 +242,25 @@ export class AgentController {
   ): Promise<Exited | Pending> {
     try {
       await this.complete(prompt, role);
+
+      // On success, reset the retry counter
+      this.retries = 0;
+
       return {
         role: "user",
       };
     } catch (err) {
-      // TODO backoff
+      if (this.retries >= this.max_retries) {
+        throw new RuntimeError(`exceeded maximum retries (${this.max_retries})`)
+      }
+
       if (err instanceof Feedback) {
         logger.feedback(err);
+
+        // Increase the retry counter as the starting tick
+        // was rejected by the user
+        this.retries += 1;
+
         return {
           prompt: err.message,
           role: "system",
@@ -260,6 +277,11 @@ export class AgentController {
         };
       } else {
         logger.error(err);
+
+        // Increase the retry counter as the starting tick
+        // failed to run successfully
+        this.retries += 1;
+
         return {
           role: "system",
           prompt: this.template.renderError(err),
@@ -358,4 +380,22 @@ try adding:
   return new AgentController(agent, opts.prompts, model, {
     allow_exit: opts.allow_exit,
   });
+}
+
+export type RunFlags<A> = {
+  agent: A;
+  // The prompts to use
+  prompts: Prompts | Promise<Prompts>;
+  // The OpenAI key to use
+  openai_key: string;
+  // Whether to expose `builtins.exit` to the agent
+  allow_exit?: boolean;
+}
+
+export async function run<A extends Agent, O>(opts: RunFlags<A>): Promise<O> {
+  const model = new llm.OpenAIChatCompletion(opts.openai_key);
+
+  const controller = new AgentController(opts.agent, await opts.prompts, model);
+
+  return await controller.runToCompletion();
 }

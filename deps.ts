@@ -20,4 +20,4 @@ export {
   Configuration,
   type CreateChatCompletionRequest,
   OpenAIApi,
-} from "npm:openai@^3.3.0";
+} from "https://esm.sh/openai@^3.3.0";
