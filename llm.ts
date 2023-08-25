@@ -1,31 +1,26 @@
 import {
-  ChatCompletionRequestMessage,
-  Configuration,
-  type CreateChatCompletionRequest,
-  OpenAIApi,
+  OpenAI,
 } from "./deps.ts";
 
 import * as errors from "./errors.ts";
 
 export interface LLM {
-  complete(messages: ChatCompletionRequestMessage[]): Promise<string>;
+  complete(messages: OpenAI.Chat.CreateChatCompletionRequestMessage[]): Promise<string>;
 }
 
 export class OpenAIChatCompletion {
-  #openai: OpenAIApi;
-  #messages: ChatCompletionRequestMessage[] = [];
-  #base: CreateChatCompletionRequest;
+  #openai: OpenAI;
+  #messages: OpenAI.Chat.CreateChatCompletionRequestMessage[] = [];
+  #base: OpenAI.Chat.CompletionCreateParamsNonStreaming;
 
-  get messages(): ChatCompletionRequestMessage[] {
+  get messages(): OpenAI.Chat.CreateChatCompletionRequestMessage[] {
     return this.#messages;
   }
 
   constructor(apiKey: string) {
-    const configuration = new Configuration({
-      apiKey,
+    this.#openai = new OpenAI({
+      apiKey
     });
-
-    this.#openai = new OpenAIApi(configuration);
 
     this.#base = {
       "model": "gpt-3.5-turbo",
@@ -34,22 +29,23 @@ export class OpenAIChatCompletion {
   }
 
   async send(
-    messages: ChatCompletionRequestMessage[],
-  ): Promise<ChatCompletionRequestMessage> {
-    const req: CreateChatCompletionRequest = {
+    messages: OpenAI.Chat.CreateChatCompletionRequestMessage[],
+  ): Promise<OpenAI.Chat.CreateChatCompletionRequestMessage> {
+    const req: OpenAI.Chat.CompletionCreateParamsNonStreaming = {
       ...this.#base,
       "messages": this.#messages.concat(messages),
     };
 
     let resp;
     try {
-      resp = await this.#openai.createChatCompletion(req);
+      resp = await this.#openai.chat.completions.create(req);
     } catch (err) {
-      const data = await err.json();
-      throw new errors.RuntimeError(`openai: ${data.error.message}`);
+      throw new errors.RuntimeError("openai error", {
+        context: err
+      });
     }
 
-    const resp_msg = resp.data.choices[0].message;
+    const resp_msg = resp.choices[0].message;
 
     if (resp_msg === undefined) {
       throw new errors.RuntimeError("Didn't receive a completion");
@@ -60,10 +56,10 @@ export class OpenAIChatCompletion {
     return resp_msg;
   }
 
-  async complete(messages: ChatCompletionRequestMessage[]): Promise<string> {
+  async complete(messages: OpenAI.Chat.CreateChatCompletionRequestMessage[]): Promise<string> {
     const resp = await this.send(messages);
 
-    if (resp.content === undefined) {
+    if (!resp.content) {
       throw new errors.RuntimeError("Completion has empty content");
     }
 

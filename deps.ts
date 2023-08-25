@@ -16,8 +16,5 @@ export { unicodeWidth } from "https://deno.land/std@0.198.0/console/mod.ts";
 export { grantOrThrow } from "https://deno.land/std@0.198.0/permissions/mod.ts";
 
 export {
-  type ChatCompletionRequestMessage,
-  Configuration,
-  type CreateChatCompletionRequest,
-  OpenAIApi,
-} from "https://esm.sh/openai@^3.3.0";
+  OpenAI
+} from "https://esm.sh/openai@^4.2.0";

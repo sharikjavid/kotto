@@ -251,7 +251,7 @@ export class AgentController {
       };
     } catch (err) {
       if (this.retries >= this.max_retries) {
-        throw new RuntimeError(`exceeded maximum retries (${this.max_retries})`)
+        throw err
       }
 
       if (err instanceof Feedback) {
