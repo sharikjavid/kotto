@@ -105,7 +105,7 @@ class Logger {
   }
 
   interrupt(err: Interrupt) {
-    const pretty_value = colors.dim(this.stringify(err.value));
+    const pretty_value = colors.dim(this.stringify(err.inner_error));
     this.trace(colors.yellow("throw"), pretty_value);
   }
 

@@ -40,7 +40,7 @@ export class OpenAIChatCompletion {
     try {
       resp = await this.#openai.chat.completions.create(req);
     } catch (err) {
-      throw new errors.RuntimeError("openai error", {
+      throw new errors.Internal("openai error", {
         context: err
       });
     }
@@ -48,7 +48,7 @@ export class OpenAIChatCompletion {
     const resp_msg = resp.choices[0].message;
 
     if (resp_msg === undefined) {
-      throw new errors.RuntimeError("Didn't receive a completion");
+      throw new errors.Internal("Didn't receive a completion");
     }
 
     this.#messages.push(...messages, resp_msg);
@@ -60,7 +60,7 @@ export class OpenAIChatCompletion {
     const resp = await this.send(messages);
 
     if (!resp.content) {
-      throw new errors.RuntimeError("Completion has empty content");
+      throw new errors.Internal("Completion has empty content");
     }
 
     return resp.content;

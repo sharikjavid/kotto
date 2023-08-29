@@ -8,8 +8,8 @@ import { Naive, Template } from "./const.ts";
 import * as log from "./log.ts";
 import * as llm from "./llm.ts";
 
-import { Exit, Feedback, Interrupt, RuntimeError } from "./errors.ts";
-export { Exit, Feedback, Interrupt, RuntimeError } from "./errors.ts";
+import { Exit, Feedback, Interrupt, Internal } from "./errors.ts";
+export { Exit, Feedback, Interrupt, Internal } from "./errors.ts";
 
 export type AgentOptions = {
   argv: string[];
@@ -202,7 +202,7 @@ export class AgentController {
         throw new Exit(action.call.arguments[0]);
       }
     } else {
-      throw new RuntimeError(`unknown builtin '${builtin}'`);
+      throw new Internal(`unknown builtin '${builtin}'`);
     }
   }
 
@@ -267,13 +267,13 @@ export class AgentController {
         };
       } else if (err instanceof Interrupt) {
         logger.interrupt(err);
-        throw err.value;
-      } else if (err instanceof RuntimeError) {
+        throw err.inner_error;
+      } else if (err instanceof Internal) {
         throw err;
       } else if (err instanceof Exit) {
         logger.exit(err);
         return {
-          output: err.value,
+          output: err.output,
         };
       } else {
         logger.error(err);
@@ -366,7 +366,7 @@ export async function makeController<O>(opts: ControllerFlags<O>): Promise<Agent
   const mod = await import(opts.source_url.href);
 
   if (mod.default === undefined) {
-    throw new RuntimeError(`module does not have a default export
+    throw new Internal(`module does not have a default export
 
 try adding:
 
@@ -398,4 +398,21 @@ export async function run<A extends Agent, O>(opts: RunFlags<A>): Promise<O> {
   const controller = new AgentController(opts.agent, await opts.prompts, model);
 
   return await controller.runToCompletion();
+}
+
+export type HandlerFlags<A> = {
+  agent: (_: Request) => A;
+  // The prompts to use
+  prompts: Prompts | Promise<Prompts>;
+  // The OpenAI key to use
+  openai_key: string;
+  // Whether to expose `builtins.exit` to the agent
+  allow_exit?: boolean;
+}
+
+export function handler<A extends Agent>(opts: HandlerFlags<A>): (_: Request) => Promise<Response> {
+  return (req: Request) => {
+    const agent = opts.agent(req);
+    return run<A, Response>({ ...opts, agent });
+  }
 }

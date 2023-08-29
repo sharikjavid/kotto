@@ -1,6 +1,6 @@
 import { join as joinPath, toFileUrl } from "./deps.ts";
 
-import { RuntimeError } from "./errors.ts";
+import { Internal } from "./errors.ts";
 import { logger } from "./log.ts";
 
 export type RunParameters = {
@@ -76,7 +76,7 @@ export class Prompts {
     });
 
     if (!(await proc?.status)?.success) {
-      throw new RuntimeError(
+      throw new Internal(
           `failed to generate prompts for ${source_url.toString()}`,
       );
     }
@@ -92,7 +92,7 @@ export class Prompts {
 
   static async fromDefault(mod_url: string): Promise<Prompts> {
     if (!mod_url.endsWith(".ts")) {
-      throw new RuntimeError(`expected path to a .ts, got ${mod_url}`);
+      throw new Internal(`expected path to a .ts, got ${mod_url}`);
     }
 
     mod_url = `${mod_url.slice(0, -3)}.prompts.js`;

@@ -9,7 +9,7 @@ import {
 } from "./deps.ts";
 
 import { Prompts } from "./prompts.ts";
-import { RuntimeError } from "./errors.ts";
+import { Internal } from "./errors.ts";
 import {buildPrompts, makeController, urlFromModuleSpecifier} from "./mod.ts";
 import { runCargoInstall } from "./utils.ts";
 import * as log from "./log.ts";
@@ -171,7 +171,7 @@ async function doRun(args: RunFlags) {
 
   const openai_key = config.openai?.key;
   if (openai_key === undefined) {
-    throw new RuntimeError(`openai.key is not set
+    throw new Internal(`openai.key is not set
 
 try running:
 
@@ -241,7 +241,7 @@ const configValidator = {
   openai: {
     key: (key: string) => {
       if (key.length === 0) {
-        throw new RuntimeError("key cannot be empty");
+        throw new Internal("key cannot be empty");
       }
     },
   },
@@ -281,7 +281,7 @@ async function config(attr: string, value: string) {
       key: value,
     };
   } else {
-    throw new RuntimeError(`unknown configuration attribute '${attr}'`);
+    throw new Internal(`unknown configuration attribute '${attr}'`);
   }
 
   await setConfig(config);
@@ -299,9 +299,9 @@ interface ErrorExt extends Error {
 }
 
 function unwind(err: ErrorExt) {
-  if (err instanceof RuntimeError) {
+  if (err instanceof Internal) {
     log.error(err.message);
-    Deno.exit(err.code || 1);
+    Deno.exit(err.exit_code || 1);
   } else {
     throw err;
   }
@@ -335,7 +335,7 @@ async function main() {
     case "debug":
       if (typeof args._[1] !== "string") {
         const help = renderHelp(command, false);
-        throw new RuntimeError(`${command} requires a PATH argument\n${help}`);
+        throw new Internal(`${command} requires a PATH argument\n${help}`);
       }
       await doRun({
         path: args._[1],
@@ -348,7 +348,7 @@ async function main() {
     case "build":
         if (typeof args._[1] !== "string") {
           const help = renderHelp(command, false);
-          throw new RuntimeError(`${command} requires a PATH argument\n${help}`);
+          throw new Internal(`${command} requires a PATH argument\n${help}`);
         }
         await doBuild({
           path: args._[1],
@@ -358,7 +358,7 @@ async function main() {
     case "config":
       if (typeof args._[1] !== "string" || typeof args._[2] !== "string") {
         const help = renderHelp(command, false);
-        throw new RuntimeError(
+        throw new Internal(
           `${command} requires an ATTR and VALUE argument\n${help}`,
         );
       }
@@ -368,7 +368,7 @@ async function main() {
       await upgrade();
       break;
     default:
-      throw new RuntimeError(`unknown command '${command}'\n${renderHelp()}`);
+      throw new Internal(`unknown command '${command}'\n${renderHelp()}`);
   }
 }
 

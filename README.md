@@ -29,9 +29,9 @@ This allows you to develop apps that use LLMs without ever doing manual promptin
 ### Why Kotto?
 - 🤖 No manual prompting
 - 🚀 Dead simple to use
-- ⚡️ Great for serverless environments like [Deno Deploy](https://deno.com/deploy)
+- ⚡️ Great for serverless like [Deno Deploy](https://deno.com/deploy) or [Supabase Edge Functions](https://supabase.com/docs/guides/functions)
 - 🚶‍ Step-by-step debugging, with introspection
-- 🦕 Built for TypeScript, with Deno + Rust 🦀
+- 🦕 Built for TypeScript, with Deno + Rust 🦀 
 
 ### Progress
 
