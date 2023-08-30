@@ -2,6 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use serde::{Serialize, Deserialize};
 
+use crate::{codegen, emit, ast};
+use crate::common::comments::Comments;
 use crate::CanPush;
 
 #[derive(Debug)]
@@ -28,15 +30,22 @@ pub struct Prompts(pub Vec<Prompt>);
 pub struct PromptFmt(pub String);
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptAstType {
+    MethodDecl,
+    ClassDecl,
+    TypeAliasDecl,
+    FnDecl,
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PromptId(pub String);
 
 impl Deref for PromptId {
     type Target = str;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -53,6 +62,7 @@ pub struct Prompt {
     pub ty: PromptType,
     pub fmt: PromptFmt,
     pub id: PromptId,
+    pub ast_ty: Option<PromptAstType>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub context: Vec<PromptId>,
@@ -63,6 +73,7 @@ impl Default for Prompt {
         Self {
             ty: PromptType::PlainText,
             fmt: PromptFmt(String::new()),
+            ast_ty: None,
             id: PromptId(String::new()),
             context: Vec::new()
         }
@@ -72,14 +83,18 @@ impl Default for Prompt {
 pub struct PromptsWriter<'p, C> {
     buf: &'p mut C,
     modified: bool,
+    comments: &'p dyn Comments,
+    scope: Vec<String>,
     builder: Prompt
 }
 
 impl<'p, C> PromptsWriter<'p, C> {
-    pub fn new(buf: &'p mut C) -> Self {
+    pub fn new(buf: &'p mut C, comments: &'p dyn Comments) -> Self {
         Self {
             buf,
             modified: false,
+            comments,
+            scope: Vec::default(),
             builder: Prompt::default()
         }
     }
@@ -89,9 +104,16 @@ impl<'p, C> PromptsWriter<'p, C> {
         self.builder.ty = prompt_type;
     }
 
-    pub fn set_fmt<S: AsRef<str>>(&mut self, fmt: S) -> Result<(), InvalidPromptError> {
+    pub fn set_fmt<N: codegen::Node>(&mut self, node: &N) -> Result<(), InvalidPromptError> {
+        let mut buf = Vec::new();
+        let mut emitter = emit::Emitter::new(&mut buf)
+            .with_comments(&self.comments);
+        node.emit_with(&mut emitter).unwrap();
+        let source_text = String::from_utf8(buf).unwrap();
+
         self.modified = true;
-        self.builder.fmt = PromptFmt(fmt.as_ref().into());
+        self.builder.fmt = PromptFmt(source_text);
+
         Ok(())
     }
 
@@ -104,10 +126,22 @@ impl<'p, C> PromptsWriter<'p, C> {
         Ok(())
     }
 
-    pub fn set_id<S: AsRef<str>>(&mut self, id: S) -> Result<(), InvalidPromptError> {
+    pub fn enter_scope(&mut self, scope: &ast::Ident) -> () {
+        self.scope.push(format!("{}", scope));
+    }
+
+    pub fn exit_scope(&mut self) -> Option<String> {
+        self.scope.pop()
+    }
+
+    pub fn set_id(&mut self, id: &ast::Ident) {
         self.modified = true;
-        self.builder.id = PromptId(id.as_ref().into());
-        Ok(())
+        self.builder.id = PromptId(format!("{}", id));
+    }
+
+    pub fn set_ast_ty(&mut self, ast_ty: PromptAstType) {
+        self.modified = true;
+        self.builder.ast_ty = Some(ast_ty);
     }
 }
 
@@ -124,7 +158,11 @@ where
             return Err(InvalidPromptError::InvalidId(self.builder.id.to_string()))
         }
 
-        let prompt = std::mem::replace(&mut self.builder, Prompt::default());
+        let mut prompt = std::mem::replace(&mut self.builder, Prompt::default());
+
+        if !self.scope.is_empty() {
+            prompt.id = PromptId(format!("{}.{}", self.scope.join("."), &*prompt.id));
+        }
 
         self.buf.push(prompt);
 

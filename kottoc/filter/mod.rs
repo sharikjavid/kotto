@@ -14,7 +14,7 @@ mod type_ref;
 mod fn_decl;
 
 pub use type_alias_decl::{TypeAliasDecl, TypeAliasVisitor};
-pub use class_decl::{ClassDecl, ClassDeclVisitor};
+pub use class_decl::{ClassDecl, ClassDeclVisitor, ClassMember};
 pub use type_ref::{TypeRef, TypeRefVisitor};
 pub use fn_decl::FnDecl;
 use crate::filter::fn_decl::FnDeclVisitor;

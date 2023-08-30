@@ -9,7 +9,12 @@ use crate::filter::{TypeRef, TypeRefVisitor};
 #[derive(Debug)]
 pub struct ClassDecl {
     pub class_decl: ast::ClassDecl,
-    pub class_methods: HashMap<ast::PropName, ClassMethod>,
+    pub class_members: HashMap<ast::PropName, ClassMember>,
+}
+
+#[derive(Debug)]
+pub enum ClassMember {
+    Method(ClassMethod),
 }
 
 #[derive(Debug)]
@@ -52,10 +57,10 @@ impl<'m, C> visit::Visit for ClassDeclVisitor<'m, C>
                 class_method.function.decorators.clear();
                 (
                     class_method.key.clone(),
-                    ClassMethod {
+                    ClassMember::Method(ClassMethod {
                         class_method,
                         type_refs
-                    }
+                    })
                 )
             })
             .collect();
@@ -66,7 +71,7 @@ impl<'m, C> visit::Visit for ClassDeclVisitor<'m, C>
 
         self.0.push(ClassDecl {
             class_decl,
-            class_methods,
+            class_members: class_methods,
         });
     }
 }

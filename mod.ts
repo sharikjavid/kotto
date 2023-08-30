@@ -186,6 +186,7 @@ export class AgentController {
         type: "ts",
         fmt: "builtins.exit",
         id: "builtins.exit",
+        ast_ty: "fn_decl",
       });
     }
 

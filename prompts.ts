@@ -41,8 +41,19 @@ interface PromptsModule {
   ast: PromptNode[];
 }
 
+type PromptTy =
+    "ts"
+    | "plaintext";
+
+type PromptAstTy =
+    "method_decl"
+    | "class_decl"
+    | "type_alias_decl"
+    | "fn_decl";
+
 type PromptNode = {
-  "type": "ts" | "plaintext";
+  "type": PromptTy;
+  ast_ty: PromptAstTy;
   fmt: string;
   id: string;
   context?: string[];
@@ -121,9 +132,11 @@ export class Scope {
   }
 
   iterFor(...pat: string[]): PromptNode[] {
-    const regex_str = `^${pat.join("\\.")}$`;
-    const regex = new RegExp(regex_str);
-    return this.#prompts.ast.filter((node) => regex.test(node.id));
+    const ast_ty_regex_str = `^${pat[0]}$`;
+    const ast_ty_regex = new RegExp(ast_ty_regex_str);
+    const id_regex_str = `^${pat.slice(1).join("\\.")}$`;
+    const id_regex = new RegExp(id_regex_str);
+    return this.#prompts.ast.filter((node) => ast_ty_regex.test(node.ast_ty) && id_regex.test(node.id));
   }
 
   addFromId(...pat: string[]) {

@@ -2,10 +2,9 @@ use std::path::Path;
 use std::io::Write;
 
 use crate::{AnyError, anyhow, CanPush};
-use crate::{ast, filter, codegen, emit};
-use crate::prompts::{Prompt, Prompts, PromptsWriter, PromptType};
+use crate::{ast, filter};
+use crate::prompts::{Prompt, PromptAstType, Prompts, PromptsWriter, PromptType};
 
-use codegen::Node;
 use deno_ast::ModuleSpecifier;
 
 use tracing::{event, Level};
@@ -39,89 +38,65 @@ pub async fn compile_prompts_for_module<'p, C>(
 where
     C: CanPush<Prompt>
 {
-    let comments = parsed_module.comments().as_single_threaded();
     let module = parsed_module.module();
 
     let filter_params = filter::FilterParams::default();
     let filtered_module = filter::run_filters(filter_params, module).await?;
 
     for type_alias_decl in filtered_module.type_alias_decls.values() {
-        prompt_writer.set_id(format!("type_alias_decl.{}", type_alias_decl.id))?;
         prompt_writer.set_type(PromptType::TypeScript);
-
-        let mut buf = Vec::new();
-        let mut emitter = emit::Emitter::new(&mut buf)
-            .with_comments(&comments);
-        type_alias_decl.emit_with(&mut emitter)?;
-        let source_text = String::from_utf8(buf)?;
-        prompt_writer.set_fmt(source_text)?;
-
+        prompt_writer.set_ast_ty(PromptAstType::TypeAliasDecl);
+        prompt_writer.set_id(&type_alias_decl.id);
+        prompt_writer.set_fmt(&type_alias_decl.0)?;
         prompt_writer.push()?;
     }
 
     for fn_decl in &filtered_module.fn_decls {
-        let id = format!("fn_decl.{}", fn_decl.ident);
-        prompt_writer.set_id(id)?;
         prompt_writer.set_type(PromptType::TypeScript);
-
-        let mut buf = Vec::new();
-        let mut emitter = emit::Emitter::new(&mut buf)
-            .with_comments(&comments);
-        fn_decl.emit_with(&mut emitter)?;
-        let source_text = String::from_utf8(buf)?;
-        prompt_writer.set_fmt(source_text)?;
+        prompt_writer.set_ast_ty(PromptAstType::FnDecl);
+        prompt_writer.set_id(&fn_decl.ident);
+        prompt_writer.set_fmt(&fn_decl.fn_decl)?;
 
         let closure = filtered_module
             .find_closure_of_type_refs(&fn_decl.type_refs)
             .into_iter()
             .map(|id| format!("type_alias_decl.{}", ast::Ident::from(id)));
-
         prompt_writer.add_to_context(closure)?;
 
         prompt_writer.push()?;
     }
 
     for class_decl in &filtered_module.class_decls {
-        let id = format!("class_decl.{}", class_decl.class_decl.ident);
-        prompt_writer.set_id(id)?;
+        let inner = &class_decl.class_decl;
+
         prompt_writer.set_type(PromptType::TypeScript);
-
-        let mut buf = Vec::new();
-        let mut emitter = emit::Emitter::new(&mut buf)
-            .with_comments(&comments);
-        class_decl.class_decl.emit_with(&mut emitter)?;
-        let source_text = String::from_utf8(buf)?;
-        prompt_writer.set_fmt(source_text)?;
-
+        prompt_writer.set_ast_ty(PromptAstType::ClassDecl);
+        prompt_writer.set_id(&inner.ident);
+        prompt_writer.set_fmt(&inner)?;
         prompt_writer.push()?;
 
-        for (prop_name, class_method) in &class_decl.class_methods {
-            let prop_ident = if let Some(prop_ident) = prop_name.clone().ident() {
-                prop_ident
-            } else {
-                continue
-            };
+        prompt_writer.enter_scope(&inner.ident);
 
-            let id = format!("method_decl.{}.{}", class_decl.class_decl.ident, prop_ident);
-            prompt_writer.set_id(id)?;
-            prompt_writer.set_type(PromptType::TypeScript);
+        for (prop_name, class_member) in &class_decl.class_members {
+            match class_member {
+                filter::ClassMember::Method(class_method) => {
+                    prompt_writer.set_type(PromptType::TypeScript);
+                    prompt_writer.set_ast_ty(PromptAstType::MethodDecl);
+                    prompt_writer.set_id(prop_name.as_ident().unwrap());
+                    prompt_writer.set_fmt(&class_method.class_method)?;
 
-            let closure = filtered_module
-                .find_closure_of_type_refs(&class_method.type_refs)
-                .into_iter()
-                .map(|id| format!("type_alias_decl.{}", ast::Ident::from(id)));
+                    let closure = filtered_module
+                        .find_closure_of_type_refs(&class_method.type_refs)
+                        .into_iter()
+                        .map(|id| format!("type_alias_decl.{}", ast::Ident::from(id)));
+                    prompt_writer.add_to_context(closure)?;
 
-            prompt_writer.add_to_context(closure)?;
-
-            let mut buf = Vec::new();
-            let mut emitter = emit::Emitter::new(&mut buf)
-                .with_comments(&comments);
-            class_method.emit_with(&mut emitter)?;
-            let source_text = String::from_utf8(buf)?;
-            prompt_writer.set_fmt(source_text)?;
-
-            prompt_writer.push()?;
+                    prompt_writer.push()?;
+                }
+            }
         }
+
+        prompt_writer.exit_scope();
     }
 
     Ok(())
@@ -147,9 +122,10 @@ where
         };
 
         let parsed_module = parse_module(specifier.to_string(), module_source).await?;
+        let comments = parsed_module.comments().as_single_threaded();
 
         let mut prompts: Vec<Prompt> = Vec::new();
-        let mut prompt_writer = PromptsWriter::new(&mut prompts);
+        let mut prompt_writer = PromptsWriter::new(&mut prompts, &comments);
 
         event!(Level::INFO, "building for {}", specifier);
 

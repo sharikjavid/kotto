@@ -40,7 +40,7 @@ This allows you to develop apps that use LLMs without ever doing manual promptin
 - [x] Customize generated prompts.
 - [x] Self-exit.
 - [x] Send system messages for feedback.
-- [ ] Prompts from class attributes/fields.
+- [o] Prompts from class attributes/fields.
 - [ ] Builtin types (e.g. Request/Response).
 - [ ] Builtin functions (e.g. fetch, Deno namespace).
 - [ ] Reinject context for extended sessions.
