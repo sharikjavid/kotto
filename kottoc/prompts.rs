@@ -34,6 +34,7 @@ pub struct PromptFmt(pub String);
 pub enum PromptAstType {
     MethodDecl,
     ClassDecl,
+    ClassProp,
     TypeAliasDecl,
     FnDecl,
 }

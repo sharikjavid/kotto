@@ -15,6 +15,7 @@ pub struct ClassDecl {
 #[derive(Debug)]
 pub enum ClassMember {
     Method(ClassMethod),
+    Prop(ClassProp),
 }
 
 #[derive(Debug)]
@@ -32,6 +33,17 @@ impl Deref for ClassMethod {
 }
 
 #[derive(Debug)]
+pub struct ClassProp(pub ast::ClassProp);
+
+impl Deref for ClassProp {
+    type Target = ast::ClassProp;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
 pub struct ClassDeclVisitor<'m, C>(pub &'m mut C);
 
 impl<'m, C> visit::Visit for ClassDeclVisitor<'m, C>
@@ -39,31 +51,39 @@ impl<'m, C> visit::Visit for ClassDeclVisitor<'m, C>
         C: CanPush<ClassDecl>
 {
     fn visit_class_decl(&mut self, n: &ast::ClassDecl) {
-        let class_methods = n.class.body
-            .iter()
-            .filter_map(|cm| {
-                match cm {
-                    ast::ClassMember::Method(method) => Some(method),
-                    _ => None
-                }
-            })
-            .cloned()
-            .map(|mut class_method| {
-                let mut type_refs = Vec::new();
-                TypeRefVisitor(&mut type_refs).visit_class_method(&class_method);
+        let mut class_members = HashMap::new();
 
-                // Trim the unnecessary stuff
-                class_method.function.body = None;
-                class_method.function.decorators.clear();
-                (
-                    class_method.key.clone(),
-                    ClassMember::Method(ClassMethod {
-                        class_method,
-                        type_refs
-                    })
-                )
-            })
-            .collect();
+        for class_member in &n.class.body {
+            match class_member {
+                ast::ClassMember::Method(class_method) => {
+                    let mut class_method = class_method.clone();
+
+                    let mut type_refs = Vec::new();
+                    TypeRefVisitor(&mut type_refs).visit_class_method(&class_method);
+
+                    // Trim the unnecessary stuff
+                    class_method.function.body = None;
+                    class_method.function.decorators.clear();
+
+                    class_members.insert(
+                        class_method.key.clone(),
+                        ClassMember::Method(ClassMethod {
+                            class_method,
+                            type_refs
+                        })
+                    );
+                }
+                ast::ClassMember::ClassProp(class_prop) => {
+                    let mut class_prop = class_prop.clone();
+                    class_prop.value.take();
+                    class_members.insert(
+                        class_prop.key.clone(),
+                        ClassMember::Prop(ClassProp(class_prop))
+                    );
+                }
+                _ => {}
+            }
+        }
 
         let mut class_decl = n.clone();
         class_decl.class.decorators.clear();
@@ -71,7 +91,7 @@ impl<'m, C> visit::Visit for ClassDeclVisitor<'m, C>
 
         self.0.push(ClassDecl {
             class_decl,
-            class_members: class_methods,
+            class_members,
         });
     }
 }

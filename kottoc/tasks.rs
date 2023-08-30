@@ -93,6 +93,13 @@ where
 
                     prompt_writer.push()?;
                 }
+                filter::ClassMember::Prop(class_prop) => {
+                    prompt_writer.set_type(PromptType::TypeScript);
+                    prompt_writer.set_ast_ty(PromptAstType::ClassProp);
+                    prompt_writer.set_id(prop_name.as_ident().unwrap());
+                    prompt_writer.set_fmt(&class_prop.0)?;
+                    prompt_writer.push()?;
+                }
             }
         }
 
