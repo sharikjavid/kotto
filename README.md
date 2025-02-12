@@ -22,7 +22,7 @@
 
 ## Introduction
 
-`kotto` is an agent framework that statically builds context-efficient prompts from plain JavaScript/TypeScript, exporting your code, so it can be consumed at runtime by popular large language models (LLMs).
+`kotto` is an agentic framework that statically builds context-efficient prompts from plain JavaScript/TypeScript, exporting your code, so it can be consumed at runtime by popular large language models (LLMs).
 
 This allows you to develop apps that use LLMs without ever doing manual prompting and, instead, leverage the type system and JSDoc strings as context to inform model predictions. And go from zero to agent in under a minute (check out the [Hello, World!](#hello-im-a-javascript-runtime))!
 
